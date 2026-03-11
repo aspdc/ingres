@@ -1,13 +1,29 @@
 "use client"
 
-import { FormEvent, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 import { Download } from "lucide-react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
+import { z } from "zod"
 
 import { api } from "@/convex/_generated/api"
 import { formatDateTime, toTimestampFromLocalDateTime } from "@/lib/date"
 import { SectionCard } from "@/components/ui/section-card"
+
+const manualMarkSchema = z.object({
+  participantEmail: z.email().transform((value) => value.trim().toLowerCase()),
+  scannedAt: z.string().optional(),
+})
+
+const updateAttendanceSchema = z.object({
+  attendanceId: z.string().trim().min(1, "Attendance ID is required"),
+  scannedAt: z.iso.datetime({ local: true, precision: -1 }),
+})
+
+type ManualMarkValues = z.infer<typeof manualMarkSchema>
+type UpdateAttendanceValues = z.infer<typeof updateAttendanceSchema>
 
 function downloadCsv(filename: string, csvContent: string) {
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
@@ -25,9 +41,20 @@ export default function AdminAttendancePage() {
   const events = useQuery(api.events.getEvents)
   const [selectedEventId, setSelectedEventId] = useState("")
   const [lookupEmail, setLookupEmail] = useState("")
-  const [attendanceId, setAttendanceId] = useState("")
-  const [newScannedAt, setNewScannedAt] = useState("")
-  const [manualScannedAt, setManualScannedAt] = useState("")
+  const manualMarkForm = useForm<ManualMarkValues>({
+    resolver: zodResolver(manualMarkSchema),
+    defaultValues: {
+      participantEmail: "",
+      scannedAt: "",
+    },
+  })
+  const updateForm = useForm<UpdateAttendanceValues>({
+    resolver: zodResolver(updateAttendanceSchema),
+    defaultValues: {
+      attendanceId: "",
+      scannedAt: "",
+    },
+  })
 
   const attendanceRows = useQuery(
     api.attendance.getAttendance,
@@ -45,22 +72,22 @@ export default function AdminAttendancePage() {
   const markAttendance = useMutation(api.attendance.markAttendance)
   const updateAttendance = useMutation(api.attendance.updateAttendance)
   const removeAttendance = useMutation(api.attendance.deleteAttendance)
+  const participantEmailField = manualMarkForm.register("participantEmail")
 
   const sortedEvents = useMemo(
     () => (events ? [...events].sort((a, b) => a.start_time - b.start_time) : []),
     [events],
   )
 
-  async function onManualMark(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function onManualMark(values: ManualMarkValues) {
     if (!selectedEventId || !participant?._id) {
       toast.error("Select event and valid participant email")
       return
     }
-    const timestamp = manualScannedAt
-      ? toTimestampFromLocalDateTime(manualScannedAt)
-      : Date.now()
-    if (!timestamp) {
+    const timestamp = values.scannedAt
+      ? toTimestampFromLocalDateTime(values.scannedAt)
+      : null
+    if (values.scannedAt && !timestamp) {
       toast.error("Invalid manual scan timestamp")
       return
     }
@@ -69,25 +96,24 @@ export default function AdminAttendancePage() {
       const result = await markAttendance({
         eventId: selectedEventId as never,
         participantId: participant._id,
-        scannedAt: timestamp,
+        scannedAt: timestamp ?? undefined,
       })
       if (result.alreadyRecorded) {
         toast.message("Attendance already recorded")
       } else {
         toast.success("Attendance marked")
       }
+      manualMarkForm.reset({
+        participantEmail: values.participantEmail,
+        scannedAt: "",
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to mark attendance")
     }
   }
 
-  async function onUpdateAttendance(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!attendanceId) {
-      toast.error("Attendance ID is required")
-      return
-    }
-    const timestamp = toTimestampFromLocalDateTime(newScannedAt)
+  async function onUpdateAttendance(values: UpdateAttendanceValues) {
+    const timestamp = toTimestampFromLocalDateTime(values.scannedAt)
     if (!timestamp) {
       toast.error("Invalid timestamp")
       return
@@ -95,12 +121,11 @@ export default function AdminAttendancePage() {
 
     try {
       await updateAttendance({
-        attendanceId: attendanceId as never,
+        attendanceId: values.attendanceId as never,
         scannedAt: timestamp,
       })
       toast.success("Attendance updated")
-      setAttendanceId("")
-      setNewScannedAt("")
+      updateForm.reset()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to update attendance")
     }
@@ -138,13 +163,19 @@ export default function AdminAttendancePage() {
             </select>
           </label>
 
-          <form onSubmit={onManualMark} className="grid gap-2 sm:grid-cols-2">
+          <form
+            onSubmit={manualMarkForm.handleSubmit(onManualMark)}
+            className="grid gap-2 sm:grid-cols-2"
+          >
             <label className="space-y-1">
               <span className="text-sm">Participant email</span>
               <input
                 type="email"
-                value={lookupEmail}
-                onChange={(event) => setLookupEmail(event.target.value)}
+                {...participantEmailField}
+                onChange={(event) => {
+                  participantEmailField.onChange(event)
+                  setLookupEmail(event.target.value)
+                }}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
                 placeholder="participant@example.com"
               />
@@ -153,25 +184,29 @@ export default function AdminAttendancePage() {
               <span className="text-sm">Scan time (optional)</span>
               <input
                 type="datetime-local"
-                value={manualScannedAt}
-                onChange={(event) => setManualScannedAt(event.target.value)}
+                {...manualMarkForm.register("scannedAt")}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
               />
             </label>
             <button
               type="submit"
+              disabled={manualMarkForm.formState.isSubmitting}
               className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground sm:col-span-2"
             >
               Mark attendance
             </button>
           </form>
+          {manualMarkForm.formState.errors.participantEmail ? (
+            <p className="text-xs text-destructive">
+              {manualMarkForm.formState.errors.participantEmail.message}
+            </p>
+          ) : null}
 
-          <form onSubmit={onUpdateAttendance} className="grid gap-2 sm:grid-cols-2">
+          <form onSubmit={updateForm.handleSubmit(onUpdateAttendance)} className="grid gap-2 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-sm">Attendance ID</span>
               <input
-                value={attendanceId}
-                onChange={(event) => setAttendanceId(event.target.value)}
+                {...updateForm.register("attendanceId")}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
                 placeholder="attendance document id"
               />
@@ -180,18 +215,24 @@ export default function AdminAttendancePage() {
               <span className="text-sm">New scan time</span>
               <input
                 type="datetime-local"
-                value={newScannedAt}
-                onChange={(event) => setNewScannedAt(event.target.value)}
+                {...updateForm.register("scannedAt")}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
               />
             </label>
             <button
               type="submit"
+              disabled={updateForm.formState.isSubmitting}
               className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary sm:col-span-2"
             >
               Update timestamp
             </button>
           </form>
+          {Object.values(updateForm.formState.errors).length > 0 ? (
+            <p className="text-xs text-destructive">
+              {updateForm.formState.errors.attendanceId?.message ??
+                updateForm.formState.errors.scannedAt?.message}
+            </p>
+          ) : null}
 
           <div className="overflow-x-auto">
             <table className="min-w-full border-collapse text-sm">

@@ -1,37 +1,54 @@
 "use client"
 
-import { FormEvent, useMemo, useState, useTransition } from "react"
+import { useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuthActions } from "@convex-dev/auth/react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
+import { z } from "zod"
 
 import { SectionCard } from "@/components/ui/section-card"
 
 type AuthMode = "signIn" | "signUp"
+const authFormSchema = z.object({
+  name: z.string().trim().optional(),
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+})
+type AuthFormValues = z.infer<typeof authFormSchema>
 
 export default function AdminLoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { signIn } = useAuthActions()
   const [mode, setMode] = useState<AuthMode>("signIn")
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
   const [isPending, startTransition] = useTransition()
+  const authForm = useForm<AuthFormValues>({
+    resolver: zodResolver(authFormSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      password: "",
+    },
+  })
 
   const nextPath = useMemo(() => searchParams.get("next") ?? "/admin", [searchParams])
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function onSubmit(values: AuthFormValues) {
+    if (mode === "signUp" && !values.name?.trim()) {
+      authForm.setError("name", { message: "Name is required for sign up" })
+      return
+    }
     startTransition(async () => {
       try {
         const payload: Record<string, string> = {
           flow: mode,
-          email: email.trim().toLowerCase(),
-          password,
+          email: values.email,
+          password: values.password,
         }
         if (mode === "signUp") {
-          payload.name = name.trim()
+          payload.name = values.name?.trim() ?? ""
         }
 
         const result = await signIn("password", payload)
@@ -72,17 +89,20 @@ export default function AdminLoginPage() {
           </button>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form onSubmit={authForm.handleSubmit(onSubmit)} className="space-y-3">
           {mode === "signUp" ? (
             <label className="block space-y-1">
               <span className="text-sm">Name</span>
               <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
+                {...authForm.register("name")}
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
                 placeholder="John Doe"
               />
+              {authForm.formState.errors.name ? (
+                <p className="text-xs text-destructive">
+                  {authForm.formState.errors.name.message}
+                </p>
+              ) : null}
             </label>
           ) : null}
 
@@ -90,25 +110,30 @@ export default function AdminLoginPage() {
             <span className="text-sm">Email</span>
             <input
               type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
+              {...authForm.register("email")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
               placeholder="admin@example.com"
             />
+            {authForm.formState.errors.email ? (
+              <p className="text-xs text-destructive">
+                {authForm.formState.errors.email.message}
+              </p>
+            ) : null}
           </label>
 
           <label className="block space-y-1">
             <span className="text-sm">Password</span>
             <input
               type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-              minLength={8}
+              {...authForm.register("password")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
               placeholder="********"
             />
+            {authForm.formState.errors.password ? (
+              <p className="text-xs text-destructive">
+                {authForm.formState.errors.password.message}
+              </p>
+            ) : null}
           </label>
 
           <button

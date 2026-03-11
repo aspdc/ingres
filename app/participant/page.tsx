@@ -1,8 +1,11 @@
 "use client"
 
-import { FormEvent, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useQuery } from "convex/react"
 import { QRCodeSVG } from "qrcode.react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
@@ -10,10 +13,19 @@ import { formatDateTime } from "@/lib/date"
 import { SectionCard } from "@/components/ui/section-card"
 import { Shell } from "@/components/ui/shell"
 
+const participantLookupSchema = z.object({
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+})
+
+type ParticipantLookupValues = z.infer<typeof participantLookupSchema>
+
 export default function ParticipantPage() {
-  const [emailInput, setEmailInput] = useState("")
   const [email, setEmail] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<Id<"events"> | null>(null)
+  const lookupForm = useForm<ParticipantLookupValues>({
+    resolver: zodResolver(participantLookupSchema),
+    defaultValues: { email: "" },
+  })
 
   const events = useQuery(
     api.events.getParticipantEvents,
@@ -39,10 +51,8 @@ export default function ParticipantPage() {
     return safeEvents.find((event) => event.eventId === selectedEventId)?.eventName ?? null
   }, [safeEvents, selectedEventId])
 
-  function handleLookup(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const normalized = emailInput.trim().toLowerCase()
-    setEmail(normalized || null)
+  function handleLookup(values: ParticipantLookupValues) {
+    setEmail(values.email || null)
     setSelectedEventId(null)
   }
 
@@ -53,22 +63,29 @@ export default function ParticipantPage() {
     >
       <div className="grid gap-4">
         <SectionCard title="Ticket Access" description="Enter your email to retrieve events.">
-          <form onSubmit={handleLookup} className="flex flex-col gap-2 sm:flex-row">
+          <form
+            onSubmit={lookupForm.handleSubmit(handleLookup)}
+            className="flex flex-col gap-2 sm:flex-row"
+          >
             <input
               type="email"
-              required
-              value={emailInput}
-              onChange={(event) => setEmailInput(event.target.value)}
+              {...lookupForm.register("email")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-0 focus:border-primary"
               placeholder="you@example.com"
             />
             <button
               type="submit"
+              disabled={lookupForm.formState.isSubmitting}
               className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
             >
               Proceed
             </button>
           </form>
+          {lookupForm.formState.errors.email ? (
+            <p className="mt-2 text-xs text-destructive">
+              {lookupForm.formState.errors.email.message}
+            </p>
+          ) : null}
         </SectionCard>
 
         <SectionCard

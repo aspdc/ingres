@@ -2,7 +2,6 @@ import { Space_Grotesk } from "next/font/google"
 import type { Metadata } from "next"
 import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server"
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
 import { ConvexClientProvider } from "./ConvexClientProvider"
 import { Toaster } from "sonner"
 
@@ -30,12 +29,10 @@ export default async function RootLayout({
     >
       <body>
         <ConvexAuthNextjsServerProvider>
-          <ThemeProvider>
-            <ConvexClientProvider>
-              {children}
-              <Toaster richColors closeButton />
-            </ConvexClientProvider>
-          </ThemeProvider>
+          <ConvexClientProvider>
+            {children}
+            <Toaster richColors closeButton />
+          </ConvexClientProvider>
         </ConvexAuthNextjsServerProvider>
       </body>
     </html>

@@ -1,12 +1,36 @@
 "use client"
 
-import { FormEvent, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { useMutation, useQuery } from "convex/react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
+import { z } from "zod"
 
 import { api } from "@/convex/_generated/api"
 import { formatDateTime, toTimestampFromLocalDateTime } from "@/lib/date"
 import { SectionCard } from "@/components/ui/section-card"
+
+const createEventSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required"),
+    description: z.string().trim(),
+    startTime: z.iso.datetime({ local: true, precision: -1 }),
+    endTime: z.iso.datetime({ local: true, precision: -1 }),
+    seriesId: z.string(),
+  })
+  .refine((value) => value.startTime < value.endTime, {
+    path: ["endTime"],
+    message: "End time must be after start time",
+  })
+
+const importCsvSchema = z.object({
+  eventId: z.string().trim().min(1, "Event is required"),
+  csv: z.string().trim().min(1, "CSV content is required"),
+})
+
+type CreateEventValues = z.infer<typeof createEventSchema>
+type ImportCsvValues = z.infer<typeof importCsvSchema>
 
 export default function AdminEventsPage() {
   const events = useQuery(api.events.getEvents)
@@ -14,24 +38,32 @@ export default function AdminEventsPage() {
   const createEvent = useMutation(api.events.createEvent)
   const deleteEvent = useMutation(api.events.deleteEvent)
   const importParticipantsCsv = useMutation(api.events.importParticipantsCSV)
-
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [startTime, setStartTime] = useState("")
-  const [endTime, setEndTime] = useState("")
-  const [seriesId, setSeriesId] = useState("")
-  const [csvEventId, setCsvEventId] = useState("")
-  const [csv, setCsv] = useState("name,email")
+  const createForm = useForm<CreateEventValues>({
+    resolver: zodResolver(createEventSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      startTime: "",
+      endTime: "",
+      seriesId: "",
+    },
+  })
+  const importForm = useForm<ImportCsvValues>({
+    resolver: zodResolver(importCsvSchema),
+    defaultValues: {
+      eventId: "",
+      csv: "name,email",
+    },
+  })
 
   const sortedEvents = useMemo(
     () => (events ? [...events].sort((a, b) => a.start_time - b.start_time) : []),
     [events],
   )
 
-  async function onCreateEvent(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const start = toTimestampFromLocalDateTime(startTime)
-    const end = toTimestampFromLocalDateTime(endTime)
+  async function onCreateEvent(values: CreateEventValues) {
+    const start = toTimestampFromLocalDateTime(values.startTime)
+    const end = toTimestampFromLocalDateTime(values.endTime)
     if (!start || !end) {
       toast.error("Invalid event date/time")
       return
@@ -39,18 +71,14 @@ export default function AdminEventsPage() {
 
     try {
       await createEvent({
-        name: name.trim(),
-        description: description.trim(),
+        name: values.name.trim(),
+        description: values.description.trim(),
         start_time: start,
         end_time: end,
-        series_id: seriesId ? (seriesId as never) : undefined,
+        series_id: values.seriesId ? (values.seriesId as never) : undefined,
       })
       toast.success("Event created")
-      setName("")
-      setDescription("")
-      setStartTime("")
-      setEndTime("")
-      setSeriesId("")
+      createForm.reset()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create event")
     }
@@ -65,18 +93,17 @@ export default function AdminEventsPage() {
     }
   }
 
-  async function onImportCsv(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!csvEventId) {
-      toast.error("Select an event for CSV import")
-      return
-    }
+  async function onImportCsv(values: ImportCsvValues) {
     try {
       const result = await importParticipantsCsv({
-        eventId: csvEventId as never,
-        csv,
+        eventId: values.eventId as never,
+        csv: values.csv,
       })
       toast.success(`Imported ${result.importedCount} participants`)
+      importForm.reset({
+        eventId: values.eventId,
+        csv: values.csv,
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "CSV import failed")
     }
@@ -85,13 +112,14 @@ export default function AdminEventsPage() {
   return (
     <div className="grid gap-4">
       <SectionCard title="Event Management" description="Create and remove events.">
-        <form onSubmit={onCreateEvent} className="grid gap-3 sm:grid-cols-2">
+        <form
+          onSubmit={createForm.handleSubmit(onCreateEvent)}
+          className="grid gap-3 sm:grid-cols-2"
+        >
           <label className="space-y-1 sm:col-span-2">
             <span className="text-sm">Name</span>
             <input
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
+              {...createForm.register("name")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
               placeholder="DL1"
             />
@@ -99,8 +127,7 @@ export default function AdminEventsPage() {
           <label className="space-y-1 sm:col-span-2">
             <span className="text-sm">Description</span>
             <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              {...createForm.register("description")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
               rows={2}
               placeholder="Deep Learning Session 1"
@@ -110,9 +137,7 @@ export default function AdminEventsPage() {
             <span className="text-sm">Start time</span>
             <input
               type="datetime-local"
-              required
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
+              {...createForm.register("startTime")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
             />
           </label>
@@ -120,17 +145,14 @@ export default function AdminEventsPage() {
             <span className="text-sm">End time</span>
             <input
               type="datetime-local"
-              required
-              value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
+              {...createForm.register("endTime")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
             />
           </label>
           <label className="space-y-1 sm:col-span-2">
             <span className="text-sm">Series (optional)</span>
             <select
-              value={seriesId}
-              onChange={(event) => setSeriesId(event.target.value)}
+              {...createForm.register("seriesId")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
             >
               <option value="">No series</option>
@@ -143,11 +165,19 @@ export default function AdminEventsPage() {
           </label>
           <button
             type="submit"
+            disabled={createForm.formState.isSubmitting}
             className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground sm:col-span-2"
           >
             Create event
           </button>
         </form>
+        {Object.values(createForm.formState.errors).length > 0 ? (
+          <p className="mt-2 text-xs text-destructive">
+            {createForm.formState.errors.name?.message ??
+              createForm.formState.errors.startTime?.message ??
+              createForm.formState.errors.endTime?.message}
+          </p>
+        ) : null}
 
         <div className="mt-5 overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
@@ -185,12 +215,11 @@ export default function AdminEventsPage() {
         title="CSV Participant Import"
         description="Upload participants for one event in a single mutation."
       >
-        <form onSubmit={onImportCsv} className="space-y-3">
+        <form onSubmit={importForm.handleSubmit(onImportCsv)} className="space-y-3">
           <label className="block space-y-1">
             <span className="text-sm">Event</span>
             <select
-              value={csvEventId}
-              onChange={(event) => setCsvEventId(event.target.value)}
+              {...importForm.register("eventId")}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
             >
               <option value="">Select event</option>
@@ -204,19 +233,25 @@ export default function AdminEventsPage() {
           <label className="block space-y-1">
             <span className="text-sm">CSV</span>
             <textarea
-              value={csv}
-              onChange={(event) => setCsv(event.target.value)}
+              {...importForm.register("csv")}
               rows={8}
               className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs focus:border-primary"
             />
           </label>
           <button
             type="submit"
+            disabled={importForm.formState.isSubmitting}
             className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
           >
             Import participants
           </button>
         </form>
+        {Object.values(importForm.formState.errors).length > 0 ? (
+          <p className="mt-2 text-xs text-destructive">
+            {importForm.formState.errors.eventId?.message ??
+              importForm.formState.errors.csv?.message}
+          </p>
+        ) : null}
       </SectionCard>
     </div>
   )
