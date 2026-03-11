@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useMutation } from "convex/react"
 import { BrowserMultiFormatReader } from "@zxing/browser"
+import { Camera, CameraOff, QrCode, ScanLine } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
@@ -119,9 +120,30 @@ export default function AdminScannerPage() {
         title="QR Attendance Scanner"
         description="Scan from camera or paste tokens manually to mark attendance."
       >
-        <div className="space-y-4">
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2">
+            <p className="inline-flex items-center gap-2 text-sm font-medium">
+              <ScanLine className="h-4 w-4" />
+              Scanner status
+            </p>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs ${
+                isScanning ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {isScanning ? "Live camera scan active" : "Camera is off"}
+            </span>
+          </div>
+
           <div className="overflow-hidden rounded-lg border bg-black">
             <video ref={videoRef} className="h-72 w-full object-cover" muted />
+            {!isScanning ? (
+              <div className="pointer-events-none -mt-72 flex h-72 items-center justify-center">
+                <div className="rounded-md bg-black/60 px-3 py-2 text-xs text-white">
+                  Start scan to activate camera
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
@@ -129,45 +151,68 @@ export default function AdminScannerPage() {
               type="button"
               onClick={startScanner}
               disabled={isScanning}
-              className="rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
             >
+              <Camera className="h-4 w-4" />
               Start camera scan
             </button>
             <button
               type="button"
               onClick={stopScanner}
               disabled={!isScanning}
-              className="rounded-md border px-4 py-3 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
+              <CameraOff className="h-4 w-4" />
               Stop scan
             </button>
           </div>
 
-          <form onSubmit={tokenForm.handleSubmit(onTokenSubmit)} className="space-y-2">
-            <label className="block space-y-1">
-              <span className="text-sm">Manual token input</span>
-              <textarea
-                {...tokenForm.register("token")}
-                rows={3}
-                className="w-full rounded-md border bg-background px-3 py-2 text-xs font-mono focus:border-primary"
-                placeholder="base64(payload).signature"
-              />
-            </label>
-            <button
-              type="submit"
-              className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary"
-            >
-              Submit token
-            </button>
-            {tokenForm.formState.errors.token ? (
-              <p className="text-xs text-destructive">
-                {tokenForm.formState.errors.token.message}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-md border p-3">
+              <p className="mb-2 inline-flex items-center gap-2 text-sm font-medium">
+                <QrCode className="h-4 w-4" />
+                Manual token input
               </p>
-            ) : null}
-          </form>
+              <form onSubmit={tokenForm.handleSubmit(onTokenSubmit)} className="space-y-2">
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted-foreground">Paste token</span>
+                  <textarea
+                    {...tokenForm.register("token")}
+                    rows={3}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-xs font-mono focus:border-primary"
+                    placeholder="base64(payload).signature"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary"
+                >
+                  Submit token
+                </button>
+                {tokenForm.formState.errors.token ? (
+                  <p className="text-xs text-destructive">
+                    {tokenForm.formState.errors.token.message}
+                  </p>
+                ) : null}
+              </form>
+            </div>
+
+            <div className="rounded-md border p-3">
+              <p className="mb-2 text-sm font-medium">Scanning tips</p>
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                <li>Center the QR code and keep a steady hand.</li>
+                <li>Use rear camera for faster focus on mobile.</li>
+                <li>Keep venue lighting on for better detection.</li>
+              </ul>
+            </div>
+          </div>
 
           {lastResult ? (
-            <div className="rounded-lg border bg-muted/30 p-4">
+            <div
+              className={`rounded-lg border p-4 ${
+                lastResult.alreadyRecorded ? "bg-amber-50" : "bg-emerald-50"
+              }`}
+            >
               <p className="text-sm font-medium">
                 {lastResult.alreadyRecorded ? "Already recorded" : "Attendance confirmed"}
               </p>
