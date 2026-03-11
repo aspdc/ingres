@@ -5,6 +5,11 @@ import { authTables } from "@convex-dev/auth/server"
 export default defineSchema({
   ...authTables,
 
+  admins: defineTable({
+    email: v.string(),
+    added_at: v.number(),
+  }).index("by_email", ["email"]),
+
   participants: defineTable({
     name: v.string(),
     email: v.string(),

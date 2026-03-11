@@ -20,13 +20,13 @@ export async function requireAdmin(ctx: Ctx) {
   }
   const user = await ctx.db.get(userId)
 
-  const admins = parseAdminEmails()
-  if (admins.size === 0) {
-    throw new Error("Admin allowlist is not configured")
+  const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : ""
+  if (!email) {
+    throw new Error("Forbidden")
   }
 
-  const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : ""
-  if (!email || !admins.has(email)) {
+  const adminsFromEnv = parseAdminEmails()
+  if (!adminsFromEnv.has(email)) {
     throw new Error("Forbidden")
   }
 
