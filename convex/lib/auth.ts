@@ -1,4 +1,5 @@
 import type { QueryCtx, MutationCtx } from "../_generated/server"
+import { getAuthUserId } from "@convex-dev/auth/server"
 
 type Ctx = QueryCtx | MutationCtx
 
@@ -13,21 +14,21 @@ function parseAdminEmails() {
 }
 
 export async function requireAdmin(ctx: Ctx) {
-  const identity = await ctx.auth.getUserIdentity()
-  if (!identity) {
+  const userId = await getAuthUserId(ctx)
+  if (!userId) {
     throw new Error("Unauthorized")
   }
+  const user = await ctx.db.get(userId)
 
   const admins = parseAdminEmails()
   if (admins.size === 0) {
     throw new Error("Admin allowlist is not configured")
   }
 
-  const email =
-    typeof identity.email === "string" ? identity.email.trim().toLowerCase() : ""
+  const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : ""
   if (!email || !admins.has(email)) {
     throw new Error("Forbidden")
   }
 
-  return identity
+  return user
 }

@@ -1,5 +1,6 @@
 import { Space_Grotesk } from "next/font/google"
 import type { Metadata } from "next"
+import { ConvexAuthNextjsServerProvider } from "@convex-dev/auth/nextjs/server"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ConvexClientProvider } from "./ConvexClientProvider"
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
     "Smoother attendance for participants and fewer spreadhsheets for ASPDC volunteers",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
@@ -28,12 +29,14 @@ export default function RootLayout({
       className={`${spaceGrotesk.className} overflow-x-hidden antialiased select-none`}
     >
       <body>
-        <ThemeProvider>
-          <ConvexClientProvider>
-            {children}
-            <Toaster richColors closeButton />
-          </ConvexClientProvider>
-        </ThemeProvider>
+        <ConvexAuthNextjsServerProvider>
+          <ThemeProvider>
+            <ConvexClientProvider>
+              {children}
+              <Toaster richColors closeButton />
+            </ConvexClientProvider>
+          </ThemeProvider>
+        </ConvexAuthNextjsServerProvider>
       </body>
     </html>
   )
