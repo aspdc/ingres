@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useMutation } from "convex/react"
-import { BrowserMultiFormatReader } from "@zxing/browser"
+import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser"
 import { Camera, CameraOff, QrCode, ScanLine } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -68,6 +68,7 @@ export default function AdminScannerPage() {
   const lastDecodeIssueAtRef = useRef<number>(0)
   const noDetectionTimerRef = useRef<number | null>(null)
   const barcodeFallbackTimerRef = useRef<number | null>(null)
+  const scannerControlsRef = useRef<IScannerControls | null>(null)
   const tokenForm = useForm<TokenValues>({
     resolver: zodResolver(tokenSchema),
     defaultValues: { token: "" },
@@ -216,56 +217,59 @@ export default function AdminScannerPage() {
         }
       }, 5000)
 
-      void reader
-        .decodeFromVideoDevice(deviceId, videoElement, async (result, error) => {
-        if (!result || isProcessingRef.current) {
-          if (error && error instanceof Error && error.name === "NotAllowedError") {
-            toast.error("Camera stream blocked by browser permissions")
-            setScanStatus("Camera stream blocked by browser permissions")
-          } else if (
-            error &&
-            error instanceof Error &&
-            error.name !== "NotFoundException" &&
-            error.name !== "ChecksumException" &&
-            error.name !== "FormatException" &&
-            Date.now() - lastDecodeIssueAtRef.current > 8000
-          ) {
-            lastDecodeIssueAtRef.current = Date.now()
-            toast.message("Scanner active, trying to decode. Hold QR steady in frame.")
-            setScanStatus("Scanner active, trying to decode QR...")
+      try {
+        const controls = await reader
+          .decodeFromVideoDevice(deviceId, videoElement, async (result, error) => {
+          if (!result || isProcessingRef.current) {
+            if (error && error instanceof Error && error.name === "NotAllowedError") {
+              toast.error("Camera stream blocked by browser permissions")
+              setScanStatus("Camera stream blocked by browser permissions")
+            } else if (
+              error &&
+              error instanceof Error &&
+              error.name !== "NotFoundException" &&
+              error.name !== "ChecksumException" &&
+              error.name !== "FormatException" &&
+              Date.now() - lastDecodeIssueAtRef.current > 8000
+            ) {
+              lastDecodeIssueAtRef.current = Date.now()
+              toast.message("Scanner active, trying to decode. Hold QR steady in frame.")
+              setScanStatus("Scanner active, trying to decode QR...")
+            }
+            return
           }
-          return
+          lastDetectionAtRef.current = Date.now()
+          isProcessingRef.current = true
+          const token = result.getText()
+          toast.message("QR detected")
+          await queueTokenForConfirmation(token, "camera")
+          setScanStatus("Scan completed")
+          })
+        scannerControlsRef.current = controls
+      } catch {
+        // Some devices fail with explicit deviceId. Retry default camera.
+        try {
+          const fallbackControls = await reader.decodeFromVideoDevice(undefined, videoElement, async (result) => {
+            if (!result || isProcessingRef.current) {
+              return
+            }
+            lastDetectionAtRef.current = Date.now()
+            isProcessingRef.current = true
+            const token = result.getText()
+            toast.message("QR detected")
+            await queueTokenForConfirmation(token, "camera")
+            setScanStatus("Scan completed")
+          })
+          scannerControlsRef.current = fallbackControls
+        } catch (fallbackError) {
+          toast.error(
+            fallbackError instanceof Error ? fallbackError.message : "Unable to start scanner",
+          )
+          setScanStatus("Unable to start scanner")
+          setIsScanning(false)
+          isScanningRef.current = false
         }
-        lastDetectionAtRef.current = Date.now()
-        isProcessingRef.current = true
-        const token = result.getText()
-        toast.message("QR detected")
-        await queueTokenForConfirmation(token, "camera")
-        setScanStatus("Scan completed")
-        })
-        .catch(async () => {
-          // Some devices fail with explicit deviceId. Retry default camera.
-          try {
-            await reader.decodeFromVideoDevice(undefined, videoElement, async (result) => {
-              if (!result || isProcessingRef.current) {
-                return
-              }
-              lastDetectionAtRef.current = Date.now()
-              isProcessingRef.current = true
-              const token = result.getText()
-              toast.message("QR detected")
-              await queueTokenForConfirmation(token, "camera")
-              setScanStatus("Scan completed")
-            })
-          } catch (fallbackError) {
-            toast.error(
-              fallbackError instanceof Error ? fallbackError.message : "Unable to start scanner",
-            )
-            setScanStatus("Unable to start scanner")
-            setIsScanning(false)
-            isScanningRef.current = false
-          }
-        })
+      }
 
       // Browser-native QR fallback for devices where zxing is unreliable.
       const BarcodeDetectorCtor = (
@@ -320,6 +324,14 @@ export default function AdminScannerPage() {
   }
 
   function stopScanner(showToast = true) {
+    // Stop the zxing continuous decode loop — without this the internal
+    // callback keeps firing and triggers stale toast notifications.
+    if (scannerControlsRef.current) {
+      scannerControlsRef.current.stop()
+      scannerControlsRef.current = null
+    }
+    readerRef.current = null
+
     const stream = videoRef.current?.srcObject
     if (stream instanceof MediaStream) {
       stream.getTracks().forEach((track) => track.stop())
@@ -327,7 +339,6 @@ export default function AdminScannerPage() {
         videoRef.current.srcObject = null
       }
     }
-    readerRef.current = null
     setIsScanning(false)
     isScanningRef.current = false
     if (noDetectionTimerRef.current) {
