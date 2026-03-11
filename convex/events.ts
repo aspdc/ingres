@@ -74,6 +74,36 @@ export const getParticipantEvents = query({
   },
 })
 
+export const getEventParticipants = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+    const registrations = await ctx.db
+      .query("eventParticipants")
+      .withIndex("by_event", (q) => q.eq("event_id", args.eventId))
+      .collect()
+
+    return Promise.all(
+      registrations.map(async (registration) => {
+        const participant = await ctx.db.get(registration.participant_id)
+        const attendance = await getAttendanceRecord(
+          ctx,
+          registration.event_id,
+          registration.participant_id,
+        )
+        return {
+          registrationId: registration._id,
+          participantId: registration.participant_id,
+          name: participant?.name ?? "Unknown",
+          email: participant?.email ?? "",
+          attended: Boolean(attendance),
+          scannedAt: attendance?.scanned_at ?? null,
+        }
+      }),
+    )
+  },
+})
+
 export const createEvent = mutation({
   args: {
     name: v.string(),
@@ -234,5 +264,37 @@ export const registerParticipantForEvent = mutation({
 
     const registrationId = await ensureRegistration(ctx, args.eventId, participantId)
     return { registrationId, participantId }
+  },
+})
+
+export const removeParticipantFromEvent = mutation({
+  args: {
+    eventId: v.id("events"),
+    participantId: v.id("participants"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+
+    const registration = await ctx.db
+      .query("eventParticipants")
+      .withIndex("by_event_participant", (q) =>
+        q.eq("event_id", args.eventId).eq("participant_id", args.participantId),
+      )
+      .unique()
+    if (registration) {
+      await ctx.db.delete(registration._id)
+    }
+
+    const attendance = await ctx.db
+      .query("attendance")
+      .withIndex("by_event_participant", (q) =>
+        q.eq("event_id", args.eventId).eq("participant_id", args.participantId),
+      )
+      .unique()
+    if (attendance) {
+      await ctx.db.delete(attendance._id)
+    }
+
+    return { removed: Boolean(registration) }
   },
 })
