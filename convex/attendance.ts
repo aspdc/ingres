@@ -132,6 +132,34 @@ export const markAttendance = mutation({
   },
 })
 
+export const previewQrToken = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+    const payload = await verifyQrToken(args.token)
+
+    const event = await ctx.db.get(payload.event_id)
+    if (!event) {
+      throw new Error("Event not found for QR token")
+    }
+    const participant = await ctx.db.get(payload.participant_id)
+    if (!participant) {
+      throw new Error("Participant not found for QR token")
+    }
+    const registration = await getRegistration(ctx, payload.event_id, payload.participant_id)
+    if (!registration) {
+      throw new Error("Participant is not registered for this event")
+    }
+
+    return {
+      participantName: participant.name,
+      participantEmail: participant.email,
+      eventName: event.name,
+      expiresAt: payload.exp,
+    }
+  },
+})
+
 export const updateAttendance = mutation({
   args: {
     attendanceId: v.id("attendance"),

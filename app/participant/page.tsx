@@ -233,7 +233,7 @@ export default function ParticipantPage() {
                       </p>
                     ) : (
                       <div className="flex flex-col items-center gap-3">
-                        <QRCodeSVG value={ticket.token ?? ""} size={220} />
+                        <QRCodeSVG value={ticket.token ?? ""} size={280} includeMargin />
                         <p className="text-center text-xs text-muted-foreground">
                           Valid until {formatDateTime(ticket.event?.endTime)}
                         </p>

@@ -11,6 +11,15 @@ import { z } from "zod"
 
 import { api } from "@/convex/_generated/api"
 import { formatDateTime } from "@/lib/date"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { SectionCard } from "@/components/ui/section-card"
 
 const tokenSchema = z.object({
@@ -19,9 +28,31 @@ const tokenSchema = z.object({
 
 type TokenValues = z.infer<typeof tokenSchema>
 
+type BrowserQrDetector = {
+  detect: (source: ImageBitmapSource | HTMLVideoElement | HTMLCanvasElement) => Promise<
+    Array<{ rawValue?: string }>
+  >
+}
+type BrowserQrDetectorCtor = new (options: {
+  formats: string[]
+}) => BrowserQrDetector
+
 export default function AdminScannerPage() {
   const markAttendance = useMutation(api.attendance.markAttendance)
+  const previewQrToken = useMutation(api.attendance.previewQrToken)
   const [isScanning, setIsScanning] = useState(false)
+  const [confirmBeforeSubmit, setConfirmBeforeSubmit] = useState(true)
+  const [scanStatus, setScanStatus] = useState("Idle")
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
+  const [isSubmittingToken, setIsSubmittingToken] = useState(false)
+  const [pendingToken, setPendingToken] = useState<string | null>(null)
+  const [pendingSource, setPendingSource] = useState<"camera" | "manual" | null>(null)
+  const [pendingPreview, setPendingPreview] = useState<{
+    participantName: string
+    participantEmail: string
+    eventName: string
+    expiresAt: number
+  } | null>(null)
   const [lastResult, setLastResult] = useState<{
     name: string
     email: string
@@ -32,12 +63,21 @@ export default function AdminScannerPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const readerRef = useRef<BrowserMultiFormatReader | null>(null)
   const isProcessingRef = useRef(false)
+  const isScanningRef = useRef(false)
+  const lastDetectionAtRef = useRef<number>(0)
+  const lastDecodeIssueAtRef = useRef<number>(0)
+  const noDetectionTimerRef = useRef<number | null>(null)
+  const barcodeFallbackTimerRef = useRef<number | null>(null)
   const tokenForm = useForm<TokenValues>({
     resolver: zodResolver(tokenSchema),
     defaultValues: { token: "" },
   })
 
   async function processToken(token: string) {
+    if (!token.trim()) {
+      toast.error("Empty QR token")
+      return false
+    }
     try {
       const result = await markAttendance({ token })
       setLastResult({
@@ -50,15 +90,77 @@ export default function AdminScannerPage() {
       if (result.alreadyRecorded) {
         toast.message("Attendance already recorded.")
       } else {
-        toast.success("Attendance marked")
+        toast.success("Attendance marked successfully")
       }
+      return true
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Scan failed")
+      return false
     }
   }
 
+  async function queueTokenForConfirmation(token: string, source: "camera" | "manual") {
+    const normalizedToken = token.trim()
+    if (!normalizedToken) {
+      toast.error("Empty QR token")
+      isProcessingRef.current = false
+      return
+    }
+
+    if (!confirmBeforeSubmit) {
+      setScanStatus("Submitting attendance...")
+      await processToken(normalizedToken)
+      if (source === "manual") {
+        tokenForm.reset()
+      }
+      isProcessingRef.current = false
+      return
+    }
+
+    setScanStatus("Preparing confirmation...")
+    try {
+      const preview = await previewQrToken({ token: normalizedToken })
+      setPendingToken(normalizedToken)
+      setPendingSource(source)
+      setPendingPreview(preview)
+      setIsConfirmDialogOpen(true)
+      setScanStatus("Awaiting confirmation")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to preview QR token")
+      setScanStatus("Unable to preview QR token")
+      isProcessingRef.current = false
+    }
+  }
+
+  function closeConfirmDialog() {
+    setIsConfirmDialogOpen(false)
+    setPendingToken(null)
+    setPendingSource(null)
+    setPendingPreview(null)
+    setIsSubmittingToken(false)
+    isProcessingRef.current = false
+  }
+
+  async function confirmSubmitToken() {
+    if (!pendingToken || !pendingSource) {
+      closeConfirmDialog()
+      return
+    }
+    setIsSubmittingToken(true)
+    setScanStatus("Submitting attendance...")
+    const success = await processToken(pendingToken)
+    if (success && pendingSource === "manual") {
+      tokenForm.reset()
+    }
+    closeConfirmDialog()
+  }
+
   async function startScanner() {
-    if (!videoRef.current || isScanning) {
+    const videoElement = videoRef.current
+    if (!videoElement || isScanning) {
+      if (isScanning) {
+        toast.message("Scanner is already running")
+      }
       return
     }
 
@@ -71,11 +173,18 @@ export default function AdminScannerPage() {
       return
     }
 
-    const reader = new BrowserMultiFormatReader()
+    const reader = new BrowserMultiFormatReader(undefined, {
+      delayBetweenScanAttempts: 120,
+      delayBetweenScanSuccess: 500,
+    })
     readerRef.current = reader
     setIsScanning(true)
+    isScanningRef.current = true
+    setScanStatus("Starting scanner...")
 
     try {
+      toast.message("Requesting camera permission...")
+      setScanStatus("Requesting camera permission...")
       // Trigger permission prompt first, then release this stream before zxing starts.
       const permissionStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
@@ -91,29 +200,126 @@ export default function AdminScannerPage() {
         throw new Error("No camera device available")
       }
 
-      await reader.decodeFromVideoDevice(deviceId, videoRef.current, async (result) => {
-        if (!result || isProcessingRef.current) {
+      lastDetectionAtRef.current = Date.now()
+      if (noDetectionTimerRef.current) {
+        window.clearInterval(noDetectionTimerRef.current)
+      }
+      noDetectionTimerRef.current = window.setInterval(() => {
+        if (!isScanningRef.current) {
           return
         }
+        const elapsed = Date.now() - lastDetectionAtRef.current
+        if (elapsed > 12000) {
+          toast.message("No QR detected yet. Move closer and improve lighting.")
+          setScanStatus("No QR detected yet. Move closer or improve lighting.")
+          lastDetectionAtRef.current = Date.now()
+        }
+      }, 5000)
+
+      void reader
+        .decodeFromVideoDevice(deviceId, videoElement, async (result, error) => {
+        if (!result || isProcessingRef.current) {
+          if (error && error instanceof Error && error.name === "NotAllowedError") {
+            toast.error("Camera stream blocked by browser permissions")
+            setScanStatus("Camera stream blocked by browser permissions")
+          } else if (
+            error &&
+            error instanceof Error &&
+            error.name !== "NotFoundException" &&
+            error.name !== "ChecksumException" &&
+            error.name !== "FormatException" &&
+            Date.now() - lastDecodeIssueAtRef.current > 8000
+          ) {
+            lastDecodeIssueAtRef.current = Date.now()
+            toast.message("Scanner active, trying to decode. Hold QR steady in frame.")
+            setScanStatus("Scanner active, trying to decode QR...")
+          }
+          return
+        }
+        lastDetectionAtRef.current = Date.now()
         isProcessingRef.current = true
-        await processToken(result.getText())
-        setTimeout(() => {
-          isProcessingRef.current = false
-        }, 1200)
-      })
+        const token = result.getText()
+        toast.message("QR detected")
+        await queueTokenForConfirmation(token, "camera")
+        setScanStatus("Scan completed")
+        })
+        .catch(async () => {
+          // Some devices fail with explicit deviceId. Retry default camera.
+          try {
+            await reader.decodeFromVideoDevice(undefined, videoElement, async (result) => {
+              if (!result || isProcessingRef.current) {
+                return
+              }
+              lastDetectionAtRef.current = Date.now()
+              isProcessingRef.current = true
+              const token = result.getText()
+              toast.message("QR detected")
+              await queueTokenForConfirmation(token, "camera")
+              setScanStatus("Scan completed")
+            })
+          } catch (fallbackError) {
+            toast.error(
+              fallbackError instanceof Error ? fallbackError.message : "Unable to start scanner",
+            )
+            setScanStatus("Unable to start scanner")
+            setIsScanning(false)
+            isScanningRef.current = false
+          }
+        })
+
+      // Browser-native QR fallback for devices where zxing is unreliable.
+      const BarcodeDetectorCtor = (
+        window as Window & { BarcodeDetector?: BrowserQrDetectorCtor }
+      ).BarcodeDetector
+      if (BarcodeDetectorCtor) {
+        const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] })
+        if (barcodeFallbackTimerRef.current) {
+          window.clearInterval(barcodeFallbackTimerRef.current)
+        }
+        barcodeFallbackTimerRef.current = window.setInterval(async () => {
+          if (!isScanningRef.current || isProcessingRef.current || !videoRef.current) {
+            return
+          }
+          try {
+            const barcodes = await detector.detect(videoRef.current)
+            const rawValue = barcodes?.[0]?.rawValue
+            if (!rawValue || typeof rawValue !== "string") {
+              return
+            }
+            lastDetectionAtRef.current = Date.now()
+            isProcessingRef.current = true
+            toast.message("QR detected by fallback scanner")
+            await queueTokenForConfirmation(rawValue, "camera")
+            setScanStatus("Scan completed")
+          } catch {
+            // Ignore fallback decode errors and continue polling.
+          } finally {
+            setTimeout(() => {
+              isProcessingRef.current = false
+            }, 1000)
+          }
+        }, 700)
+      }
+
+      toast.success("Camera started. Point it at a QR code.")
+      setScanStatus("Camera started. Point it at a QR code.")
     } catch (error) {
       if (error instanceof DOMException && error.name === "NotAllowedError") {
         toast.error("Camera permission denied. Please allow camera access and try again.")
+        setScanStatus("Camera permission denied")
       } else if (error instanceof DOMException && error.name === "NotFoundError") {
         toast.error("No camera found on this device")
+        setScanStatus("No camera found")
       } else {
         toast.error(error instanceof Error ? error.message : "Unable to start scanner")
+        setScanStatus("Unable to start scanner")
       }
       setIsScanning(false)
+      isScanningRef.current = false
     }
   }
 
-  function stopScanner() {
+  function stopScanner(showToast = true) {
     const stream = videoRef.current?.srcObject
     if (stream instanceof MediaStream) {
       stream.getTracks().forEach((track) => track.stop())
@@ -123,21 +329,85 @@ export default function AdminScannerPage() {
     }
     readerRef.current = null
     setIsScanning(false)
+    isScanningRef.current = false
+    if (noDetectionTimerRef.current) {
+      window.clearInterval(noDetectionTimerRef.current)
+      noDetectionTimerRef.current = null
+    }
+    if (barcodeFallbackTimerRef.current) {
+      window.clearInterval(barcodeFallbackTimerRef.current)
+      barcodeFallbackTimerRef.current = null
+    }
+    setScanStatus("Scanner stopped")
+    if (showToast) {
+      toast.message("Scanner stopped")
+    }
   }
 
   useEffect(() => {
     return () => {
-      stopScanner()
+      stopScanner(false)
     }
   }, [])
 
   async function onTokenSubmit(values: TokenValues) {
-    await processToken(values.token)
-    tokenForm.reset()
+    isProcessingRef.current = true
+    await queueTokenForConfirmation(values.token, "manual")
   }
 
   return (
     <div className="grid gap-4">
+      <Dialog
+        open={isConfirmDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeConfirmDialog()
+          }
+        }}
+      >
+        <DialogContent showCloseButton={!isSubmittingToken}>
+          <DialogHeader>
+            <DialogTitle>Confirm Attendance Submission</DialogTitle>
+            <DialogDescription>
+              Please confirm this QR token submission before marking attendance.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingPreview ? (
+            <div className="space-y-1 text-sm">
+              <p>
+                Participant: <span className="font-medium">{pendingPreview.participantName}</span>
+              </p>
+              <p className="text-muted-foreground">{pendingPreview.participantEmail}</p>
+              <p>
+                Event: <span className="font-medium">{pendingPreview.eventName}</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Token expires at {formatDateTime(pendingPreview.expiresAt)}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading token details...</p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeConfirmDialog}
+              disabled={isSubmittingToken}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmSubmitToken}
+              disabled={!pendingPreview || isSubmittingToken}
+            >
+              {isSubmittingToken ? "Submitting..." : "Confirm & Submit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <SectionCard
         title="QR Attendance Scanner"
         description="Scan from camera or paste tokens manually to mark attendance."
@@ -156,6 +426,7 @@ export default function AdminScannerPage() {
               {isScanning ? "Live camera scan active" : "Camera is off"}
             </span>
           </div>
+          <p className="text-xs text-muted-foreground">Status: {scanStatus}</p>
 
           <div className="overflow-hidden rounded-lg border bg-black">
             <video ref={videoRef} className="h-72 w-full object-cover" muted playsInline />
@@ -180,7 +451,7 @@ export default function AdminScannerPage() {
             </button>
             <button
               type="button"
-              onClick={stopScanner}
+              onClick={() => stopScanner()}
               disabled={!isScanning}
               className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -188,6 +459,16 @@ export default function AdminScannerPage() {
               Stop scan
             </button>
           </div>
+
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={confirmBeforeSubmit}
+              onChange={(event) => setConfirmBeforeSubmit(event.target.checked)}
+              className="h-4 w-4 rounded border"
+            />
+            Ask confirmation before submitting attendance
+          </label>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-md border p-3">
