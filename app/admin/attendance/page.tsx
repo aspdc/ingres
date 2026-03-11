@@ -133,7 +133,7 @@ export default function AdminAttendancePage() {
     <div className="grid gap-4">
       <SectionCard
         title="Attendance Management"
-        description="View attendance records and manually adjust timestamps or entries."
+        description="Select an event, mark attendance manually, and correct records."
       >
         <div className="space-y-4">
           <label className="block space-y-1">
@@ -223,10 +223,10 @@ export default function AdminAttendancePage() {
             </p>
           ) : null}
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-md border">
             <table className="min-w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b">
+                <tr className="border-b bg-muted/40">
                   <th className="px-2 py-2 text-left">Attendance ID</th>
                   <th className="px-2 py-2 text-left">Name</th>
                   <th className="px-2 py-2 text-left">Email</th>
@@ -257,7 +257,10 @@ export default function AdminAttendancePage() {
           </div>
         </div>
       </SectionCard>
-      <SectionCard title="CSV Export" description="Export attendance sheet as CSV.">
+      <SectionCard
+        title="Attendance CSV Export"
+        description="Download the currently selected event's attendance sheet."
+      >
         <button
           type="button"
           onClick={() => {

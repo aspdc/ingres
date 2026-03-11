@@ -116,8 +116,8 @@ export default function AdminScannerPage() {
   return (
     <div className="grid gap-4">
       <SectionCard
-        title="Scanner"
-        description="Camera scanner UI will validate signed QR tokens and mark attendance."
+        title="QR Attendance Scanner"
+        description="Scan from camera or paste tokens manually to mark attendance."
       >
         <div className="space-y-4">
           <div className="overflow-hidden rounded-lg border bg-black">
@@ -167,7 +167,7 @@ export default function AdminScannerPage() {
           </form>
 
           {lastResult ? (
-            <div className="rounded-lg border p-4">
+            <div className="rounded-lg border bg-muted/30 p-4">
               <p className="text-sm font-medium">
                 {lastResult.alreadyRecorded ? "Already recorded" : "Attendance confirmed"}
               </p>

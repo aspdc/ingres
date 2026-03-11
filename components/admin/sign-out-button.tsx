@@ -25,7 +25,7 @@ export function SignOutButton() {
         })
       }}
       disabled={isPending}
-      className="inline-flex rounded-md border px-3 py-1.5 text-sm transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+      className="inline-flex w-full items-center justify-center rounded-md border px-3 py-2 text-sm transition hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
     >
       {isPending ? "Signing out..." : "Sign out"}
     </button>

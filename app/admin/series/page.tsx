@@ -112,7 +112,7 @@ export default function AdminSeriesPage() {
     <div className="grid gap-4">
       <SectionCard
         title="Series Configuration"
-        description="Define minimum events and optional required event for certificates."
+        description="Create or update series rules for certificate eligibility."
       >
         <label className="mb-3 block space-y-1">
           <span className="text-sm">Select existing series (optional)</span>
@@ -183,21 +183,23 @@ export default function AdminSeriesPage() {
               ))}
             </select>
           </label>
-          <button
-            type="button"
-            onClick={createForm.handleSubmit(onCreateSeries)}
-            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
-          >
-            Create series
-          </button>
-          <button
-            type="button"
-            onClick={createForm.handleSubmit(onUpdateSeries)}
-            disabled={!selectedSeries}
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Update selected series
-          </button>
+          <div className="grid gap-2 sm:col-span-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={createForm.handleSubmit(onCreateSeries)}
+              className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+            >
+              Create series
+            </button>
+            <button
+              type="button"
+              onClick={createForm.handleSubmit(onUpdateSeries)}
+              disabled={!selectedSeries}
+              className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Update selected series
+            </button>
+          </div>
         </form>
         {Object.values(createForm.formState.errors).length > 0 ? (
           <p className="mt-2 text-xs text-destructive">
@@ -240,10 +242,10 @@ export default function AdminSeriesPage() {
         ) : progress.length === 0 ? (
           <p className="text-sm text-muted-foreground">No progress found.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto rounded-md border">
             <table className="min-w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b">
+                <tr className="border-b bg-muted/40">
                   <th className="px-2 py-2 text-left">Series</th>
                   <th className="px-2 py-2 text-left">Attended</th>
                   <th className="px-2 py-2 text-left">Required Event</th>

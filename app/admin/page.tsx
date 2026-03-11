@@ -1,38 +1,45 @@
 import { SectionCard } from "@/components/ui/section-card"
+import { ArrowRight } from "lucide-react"
 
 export default function AdminOverviewPage() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <SectionCard title="Event Operations" description="Manage events and CSV registrations.">
-        <a href="/admin/events" className="text-sm text-primary underline underline-offset-4">
-          Open Events
+    <div className="grid gap-4 md:grid-cols-2">
+      <SectionCard
+        title="Event Operations"
+        description="Create, update, and manage event participants and CSV imports."
+      >
+        <a
+          href="/admin/events"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+        >
+          Open events <ArrowRight className="h-4 w-4" />
         </a>
       </SectionCard>
       <SectionCard
         title="Attendance Ops"
-        description="Mark, edit, remove attendance and export sheets."
+        description="Mark attendance, correct timestamps, and export attendance sheets."
       >
         <a
           href="/admin/attendance"
-          className="text-sm text-primary underline underline-offset-4"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary"
         >
-          Open Attendance
+          Open attendance <ArrowRight className="h-4 w-4" />
         </a>
       </SectionCard>
       <SectionCard
         title="Series Certificates"
-        description="Configure rules and export certificate eligibility CSV."
+        description="Configure eligibility rules and export certificate lists."
       >
-        <a href="/admin/series" className="text-sm text-primary underline underline-offset-4">
-          Open Series
+        <a href="/admin/series" className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+          Open series <ArrowRight className="h-4 w-4" />
         </a>
       </SectionCard>
       <SectionCard
         title="Scanner Workflow"
-        description="Use camera scan with instant attendance feedback."
+        description="Scan signed QR tokens from camera or manual token input."
       >
-        <a href="/admin/scanner" className="text-sm text-primary underline underline-offset-4">
-          Open Scanner
+        <a href="/admin/scanner" className="inline-flex items-center gap-2 text-sm font-medium text-primary">
+          Open scanner <ArrowRight className="h-4 w-4" />
         </a>
       </SectionCard>
     </div>

@@ -146,7 +146,7 @@ export default function AdminEventsPage() {
       endTime: toLocalDateTimeInputValue(selectedEvent.end_time),
       seriesId: selectedEvent.series_id ?? "",
     })
-  }, [selectedEvent, editForm, addParticipantForm])
+  }, [selectedEvent, editForm])
 
   useEffect(() => {
     if (!selectedParticipant) {
@@ -285,8 +285,8 @@ export default function AdminEventsPage() {
   return (
     <div className="grid gap-5">
       <SectionCard
-        title="1) Select Event"
-        description="Pick an event to edit details and participants."
+        title="Event Directory"
+        description="Pick an active event, review schedule, or remove unused events."
       >
         <label className="mb-4 block space-y-1">
           <span className="text-sm">Active event</span>
@@ -304,10 +304,16 @@ export default function AdminEventsPage() {
           </select>
         </label>
 
-        <div className="overflow-x-auto">
+        {selectedEvent ? (
+          <p className="mb-3 rounded-md border bg-muted/50 px-3 py-2 text-sm">
+            Active event: <span className="font-medium">{selectedEvent.name}</span>
+          </p>
+        ) : null}
+
+        <div className="overflow-x-auto rounded-md border">
           <table className="min-w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b">
+              <tr className="border-b bg-muted/40">
                 <th className="px-2 py-2 text-left">Event</th>
                 <th className="px-2 py-2 text-left">Start</th>
                 <th className="px-2 py-2 text-left">End</th>
@@ -345,7 +351,7 @@ export default function AdminEventsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="2) Create Event" description="Create a new event record.">
+      <SectionCard title="Create Event" description="Create a new event record.">
         <form
           onSubmit={createForm.handleSubmit(onCreateEvent)}
           className="grid gap-3 sm:grid-cols-2"
@@ -415,7 +421,7 @@ export default function AdminEventsPage() {
       </SectionCard>
 
       <SectionCard
-        title="3) Edit Event Details"
+        title="Edit Event Details"
         description="Update details for the selected event."
       >
         {!selectedEventId ? (
@@ -523,10 +529,10 @@ export default function AdminEventsPage() {
           </button>
         </form>
 
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 overflow-x-auto rounded-md border">
           <table className="min-w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b">
+              <tr className="border-b bg-muted/40">
                 <th className="px-2 py-2 text-left">Name</th>
                 <th className="px-2 py-2 text-left">Email</th>
                 <th className="px-2 py-2 text-left">Status</th>
