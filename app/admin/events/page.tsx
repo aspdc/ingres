@@ -56,6 +56,7 @@ const editParticipantSchema = z.object({
   participantId: z.string().trim().min(1, "Participant is required"),
   name: z.string().trim().min(1, "Name is required"),
   email: z.email().transform((value) => value.trim().toLowerCase()),
+  attendanceStatus: z.enum(["attended", "not_attended"]),
 })
 
 type CreateEventValues = z.infer<typeof createEventSchema>
@@ -73,6 +74,7 @@ export default function AdminEventsPage() {
   const importParticipantsCsv = useMutation(api.events.importParticipantsCSV)
   const registerParticipantForEvent = useMutation(api.events.registerParticipantForEvent)
   const removeParticipantFromEvent = useMutation(api.events.removeParticipantFromEvent)
+  const setParticipantAttendanceStatus = useMutation(api.events.setParticipantAttendanceStatus)
   const updateParticipant = useMutation(api.participants.updateParticipant)
   const [selectedEventId, setSelectedEventId] = useState<string>("")
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("")
@@ -122,6 +124,7 @@ export default function AdminEventsPage() {
       participantId: "",
       name: "",
       email: "",
+      attendanceStatus: "not_attended",
     },
   })
 
@@ -156,6 +159,7 @@ export default function AdminEventsPage() {
       participantId: selectedParticipant.participantId,
       name: selectedParticipant.name,
       email: selectedParticipant.email,
+      attendanceStatus: selectedParticipant.attended ? "attended" : "not_attended",
     })
   }, [selectedParticipant, editParticipantForm])
 
@@ -255,11 +259,20 @@ export default function AdminEventsPage() {
   }
 
   async function onEditParticipant(values: EditParticipantValues) {
+    if (!selectedEventId) {
+      toast.error("Select an event first")
+      return
+    }
     try {
       await updateParticipant({
         participantId: values.participantId as Id<"participants">,
         name: values.name,
         email: values.email,
+      })
+      await setParticipantAttendanceStatus({
+        eventId: selectedEventId as Id<"events">,
+        participantId: values.participantId as Id<"participants">,
+        attended: values.attendanceStatus === "attended",
       })
       toast.success("Participant updated")
     } catch (error) {
@@ -529,6 +542,53 @@ export default function AdminEventsPage() {
           </button>
         </form>
 
+        <form
+          onSubmit={editParticipantForm.handleSubmit(onEditParticipant)}
+          className="mt-4 grid gap-2 rounded-md border p-3 sm:grid-cols-4"
+        >
+          <label className="space-y-1 sm:col-span-4">
+            <span className="text-xs">Participant details</span>
+            <select
+              value={selectedParticipantId}
+              onChange={(event) => setSelectedParticipantId(event.target.value)}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
+            >
+              <option value="">Select participant</option>
+              {(eventParticipants ?? []).map((item) => (
+                <option key={item.participantId} value={item.participantId}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <input type="hidden" {...editParticipantForm.register("participantId")} />
+          <input
+            {...editParticipantForm.register("name")}
+            placeholder="Updated name"
+            className="rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
+          />
+          <input
+            type="email"
+            {...editParticipantForm.register("email")}
+            placeholder="Updated email"
+            className="rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
+          />
+          <select
+            {...editParticipantForm.register("attendanceStatus")}
+            className="rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
+          >
+            <option value="not_attended">Not attended</option>
+            <option value="attended">Attended</option>
+          </select>
+          <button
+            type="submit"
+            disabled={!selectedParticipantId || editParticipantForm.formState.isSubmitting}
+            className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Save participant
+          </button>
+        </form>
+
         <div className="mt-4 overflow-x-auto rounded-md border">
           <table className="min-w-full border-collapse text-sm">
             <thead>
@@ -570,46 +630,6 @@ export default function AdminEventsPage() {
             </tbody>
           </table>
         </div>
-
-        <form
-          onSubmit={editParticipantForm.handleSubmit(onEditParticipant)}
-          className="mt-4 grid gap-2 sm:grid-cols-3"
-        >
-          <label className="space-y-1">
-            <span className="text-xs">Participant</span>
-            <select
-              value={selectedParticipantId}
-              onChange={(event) => setSelectedParticipantId(event.target.value)}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
-            >
-              <option value="">Select participant</option>
-              {(eventParticipants ?? []).map((item) => (
-                <option key={item.participantId} value={item.participantId}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <input type="hidden" {...editParticipantForm.register("participantId")} />
-          <input
-            {...editParticipantForm.register("name")}
-            placeholder="Updated name"
-            className="rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
-          />
-          <input
-            type="email"
-            {...editParticipantForm.register("email")}
-            placeholder="Updated email"
-            className="rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
-          />
-          <button
-            type="submit"
-            disabled={!selectedParticipantId || editParticipantForm.formState.isSubmitting}
-            className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-3"
-          >
-            Update participant details
-          </button>
-        </form>
       </SectionCard>
 
       <SectionCard

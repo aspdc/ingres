@@ -6,7 +6,7 @@ import { getAttendanceRecord } from "./lib/attendance"
 import { parseParticipantsCsv } from "./lib/csv"
 import { invariant } from "./lib/errors"
 import { ensureParticipant, getParticipantByEmail, normalizeEmail } from "./lib/participants"
-import { ensureRegistration } from "./lib/registrations"
+import { ensureRegistration, getRegistration } from "./lib/registrations"
 
 function getEventStatus(params: {
   now: number
@@ -96,6 +96,7 @@ export const getEventParticipants = query({
           participantId: registration.participant_id,
           name: participant?.name ?? "Unknown",
           email: participant?.email ?? "",
+          attendanceId: attendance?._id ?? null,
           attended: Boolean(attendance),
           scannedAt: attendance?.scanned_at ?? null,
         }
@@ -296,5 +297,40 @@ export const removeParticipantFromEvent = mutation({
     }
 
     return { removed: Boolean(registration) }
+  },
+})
+
+export const setParticipantAttendanceStatus = mutation({
+  args: {
+    eventId: v.id("events"),
+    participantId: v.id("participants"),
+    attended: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+
+    const registration = await getRegistration(ctx, args.eventId, args.participantId)
+    if (!registration) {
+      throw new Error("Participant is not registered for this event")
+    }
+
+    const existingAttendance = await getAttendanceRecord(ctx, args.eventId, args.participantId)
+
+    if (args.attended) {
+      if (existingAttendance) {
+        return { attendanceId: existingAttendance._id, attended: true }
+      }
+      const attendanceId = await ctx.db.insert("attendance", {
+        event_id: args.eventId,
+        participant_id: args.participantId,
+        scanned_at: Date.now(),
+      })
+      return { attendanceId, attended: true }
+    }
+
+    if (existingAttendance) {
+      await ctx.db.delete(existingAttendance._id)
+    }
+    return { attendanceId: null, attended: false }
   },
 })
