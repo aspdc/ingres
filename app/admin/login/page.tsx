@@ -41,14 +41,18 @@ export default function AdminLoginPage() {
       return
     }
     startTransition(async () => {
+      const normalizedEmail = values.email
+      const normalizedName = values.name?.trim() ?? ""
+      const password = values.password
+
       try {
         const payload: Record<string, string> = {
           flow: mode,
-          email: values.email,
-          password: values.password,
+          email: normalizedEmail,
+          password,
         }
         if (mode === "signUp") {
-          payload.name = values.name?.trim() ?? ""
+          payload.name = normalizedName
         }
 
         const result = await signIn("password", payload)
@@ -60,6 +64,25 @@ export default function AdminLoginPage() {
         router.replace(nextPath)
       } catch (error) {
         const message = error instanceof Error ? error.message : "Authentication failed"
+
+        // If user attempts sign-up with an existing email, transparently try sign-in.
+        if (mode === "signUp" && message.toLowerCase().includes("already exists")) {
+          try {
+            const signInResult = await signIn("password", {
+              flow: "signIn",
+              email: normalizedEmail,
+              password,
+            })
+            if (signInResult.signingIn) {
+              toast.success("Signed in")
+              router.replace(nextPath)
+              return
+            }
+          } catch {
+            // Fall through to original error message below.
+          }
+        }
+
         toast.error(message)
       }
     })

@@ -4,10 +4,12 @@ import { useMemo, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { Download } from "lucide-react"
 import { toast } from "sonner"
 import { z } from "zod"
 
 import { api } from "@/convex/_generated/api"
+import { downloadTextFile } from "@/lib/download"
 import { SectionCard } from "@/components/ui/section-card"
 
 const createSeriesSchema = z.object({
@@ -34,6 +36,10 @@ export default function AdminSeriesPage() {
   const progress = useQuery(
     api.series.getSeriesProgress,
     participantEmail ? { email: participantEmail } : "skip",
+  )
+  const certificatesCsv = useQuery(
+    api.exports.exportCertificatesCSV,
+    selectedSeriesId ? { seriesId: selectedSeriesId as never } : {},
   )
 
   const sortedEvents = useMemo(
@@ -263,6 +269,34 @@ export default function AdminSeriesPage() {
             </table>
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard
+        title="Certificate Export"
+        description="Download CSV for all series or currently selected series."
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (!certificatesCsv) {
+              toast.error("Certificate export is loading")
+              return
+            }
+            const filename = selectedSeriesId
+              ? `certificates-${selectedSeriesId}.csv`
+              : "certificates-all-series.csv"
+            downloadTextFile({
+              filename,
+              content: certificatesCsv,
+              mimeType: "text/csv;charset=utf-8;",
+            })
+            toast.success("Certificate CSV downloaded")
+          }}
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+        >
+          <Download className="h-4 w-4" />
+          Download certificates CSV
+        </button>
       </SectionCard>
     </div>
   )

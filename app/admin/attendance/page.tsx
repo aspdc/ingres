@@ -10,6 +10,7 @@ import { z } from "zod"
 
 import { api } from "@/convex/_generated/api"
 import { formatDateTime, toTimestampFromLocalDateTime } from "@/lib/date"
+import { downloadTextFile } from "@/lib/download"
 import { SectionCard } from "@/components/ui/section-card"
 
 const manualMarkSchema = z.object({
@@ -24,18 +25,6 @@ const updateAttendanceSchema = z.object({
 
 type ManualMarkValues = z.infer<typeof manualMarkSchema>
 type UpdateAttendanceValues = z.infer<typeof updateAttendanceSchema>
-
-function downloadCsv(filename: string, csvContent: string) {
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
 
 export default function AdminAttendancePage() {
   const events = useQuery(api.events.getEvents)
@@ -276,7 +265,11 @@ export default function AdminAttendancePage() {
               toast.error("Select an event first")
               return
             }
-            downloadCsv(`attendance-${selectedEventId}.csv`, attendanceCsv)
+            downloadTextFile({
+              filename: `attendance-${selectedEventId}.csv`,
+              content: attendanceCsv,
+              mimeType: "text/csv;charset=utf-8;",
+            })
             toast.success("Attendance CSV downloaded")
           }}
           className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
