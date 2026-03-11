@@ -61,11 +61,27 @@ export default function AdminScannerPage() {
     if (!videoRef.current || isScanning) {
       return
     }
+
+    if (!window.isSecureContext) {
+      toast.error("Camera access requires HTTPS or localhost")
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("Camera API is not available in this browser")
+      return
+    }
+
     const reader = new BrowserMultiFormatReader()
     readerRef.current = reader
     setIsScanning(true)
 
     try {
+      // Trigger permission prompt first, then release this stream before zxing starts.
+      const permissionStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+      })
+      permissionStream.getTracks().forEach((track) => track.stop())
+
       const devices = await BrowserMultiFormatReader.listVideoInputDevices()
       const preferred = devices.find((device) =>
         device.label.toLowerCase().includes("back"),
@@ -86,7 +102,13 @@ export default function AdminScannerPage() {
         }, 1200)
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to start scanner")
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        toast.error("Camera permission denied. Please allow camera access and try again.")
+      } else if (error instanceof DOMException && error.name === "NotFoundError") {
+        toast.error("No camera found on this device")
+      } else {
+        toast.error(error instanceof Error ? error.message : "Unable to start scanner")
+      }
       setIsScanning(false)
     }
   }
@@ -136,7 +158,7 @@ export default function AdminScannerPage() {
           </div>
 
           <div className="overflow-hidden rounded-lg border bg-black">
-            <video ref={videoRef} className="h-72 w-full object-cover" muted />
+            <video ref={videoRef} className="h-72 w-full object-cover" muted playsInline />
             {!isScanning ? (
               <div className="pointer-events-none -mt-72 flex h-72 items-center justify-center">
                 <div className="rounded-md bg-black/60 px-3 py-2 text-xs text-white">
