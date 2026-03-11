@@ -10,7 +10,7 @@ const spaceGrotesk = Space_Grotesk({
 
 
 export const metadata: Metadata = {
-  title: 'Ingress',
+  title: 'Ingres by ASPDC',
   description: 'Smoother attendance for participants and fewer spreadhsheets for ASPDC volunteers',
 }
 

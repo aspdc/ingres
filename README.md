@@ -1,23 +1,9 @@
 # Ingress
 
-> Smoother attendance for participants and fewer spreadhsheets for 
+> Smoother attendance for participants and fewer spreadhsheets for ASPDC volunteers
 
+As corny as it sounds this platform is actually made to tackle the hassle of attendance and stuff
 
+coded by [this guy](https://github.com/ni3rav) when [this dude](https://github.com/Jain-Tirth) came up with the idea of solving this fuzz
 
-## Adding components
-
-To add components to your app, run the following command:
-
-```bash
-npx shadcn@latest add button
-```
-
-This will place the ui components in the `components` directory.
-
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button";
-```
+ahh i can't write more than this kthxbye
