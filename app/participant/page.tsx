@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useQuery } from "convex/react"
 import { CheckCircle2, Eye, EyeOff, QrCode, TableProperties } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
@@ -11,6 +12,7 @@ import { z } from "zod"
 import { api } from "@/convex/_generated/api"
 import type { Id } from "@/convex/_generated/dataModel"
 import { formatDateTime } from "@/lib/date"
+import { Button } from "@/components/ui/button"
 import { SectionCard } from "@/components/ui/section-card"
 import { Shell } from "@/components/ui/shell"
 
@@ -67,8 +69,13 @@ export default function ParticipantPage() {
 
   return (
     <Shell
-      title="Participant Portal"
-      description="Find your event tickets, attendance history, and series progress."
+      title="Ingres by ASPDC"
+      description="Find your event tickets, attendance history, and series progress for ASPDC events"
+      headerAction={
+        <Button asChild variant="outline">
+          <Link href="/admin">Admin</Link>
+        </Button>
+      }
     >
       <div className="grid gap-4">
         <SectionCard title="Ticket Access" description="Enter your email to retrieve events.">

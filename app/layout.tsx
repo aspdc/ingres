@@ -25,7 +25,7 @@ export default async function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${spaceGrotesk.className} overflow-x-hidden antialiased select-none`}
+      className={`${spaceGrotesk.className} overflow-x-hidden antialiased`}
     >
       <body>
         <ConvexAuthNextjsServerProvider>

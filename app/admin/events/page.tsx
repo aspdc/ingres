@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -14,6 +14,7 @@ import {
   toLocalDateTimeInputValue,
   toTimestampFromLocalDateTime,
 } from "@/lib/date"
+import { downloadTextFile } from "@/lib/download"
 import { SectionCard } from "@/components/ui/section-card"
 
 const createEventSchema = z
@@ -78,6 +79,10 @@ export default function AdminEventsPage() {
   const updateParticipant = useMutation(api.participants.updateParticipant)
   const [selectedEventId, setSelectedEventId] = useState<string>("")
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("")
+  const [participantSort, setParticipantSort] = useState<"attended_first" | "not_attended_first">(
+    "attended_first",
+  )
+  const participantEditFormRef = useRef<HTMLFormElement | null>(null)
 
   const eventParticipants = useQuery(
     api.events.getEventParticipants,
@@ -136,6 +141,17 @@ export default function AdminEventsPage() {
   const selectedParticipant =
     (eventParticipants ?? []).find((item) => item.participantId === selectedParticipantId) ??
     null
+  const sortedEventParticipants = useMemo(() => {
+    const rows = [...(eventParticipants ?? [])]
+    return rows.sort((a, b) => {
+      if (a.attended === b.attended) {
+        return a.name.localeCompare(b.name)
+      }
+      return participantSort === "attended_first"
+        ? Number(b.attended) - Number(a.attended)
+        : Number(a.attended) - Number(b.attended)
+    })
+  }, [eventParticipants, participantSort])
 
   useEffect(() => {
     if (!selectedEvent) {
@@ -293,6 +309,75 @@ export default function AdminEventsPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to remove participant")
     }
+  }
+
+  function handleEditParticipantClick(participantId: string) {
+    setSelectedParticipantId(participantId)
+    requestAnimationFrame(() => {
+      participantEditFormRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+  }
+
+  function toCsvCell(value: string) {
+    if (value.includes(",") || value.includes("\n") || value.includes('"')) {
+      return `"${value.replaceAll('"', '""')}"`
+    }
+    return value
+  }
+
+  function exportParticipantsCsv(type: "present" | "absent" | "all") {
+    if (!selectedEventId) {
+      toast.error("Select an event first")
+      return
+    }
+    const filteredRows = sortedEventParticipants.filter((row) => {
+      if (type === "all") {
+        return true
+      }
+      return type === "present" ? row.attended : !row.attended
+    })
+    if (filteredRows.length === 0) {
+      toast.message(
+        type === "present"
+          ? "No present participants found"
+          : type === "absent"
+            ? "No absent participants found"
+            : "No participants found",
+      )
+      return
+    }
+
+    const csvRows = [
+      "name,email,status,scanned_at",
+      ...filteredRows.map((row) =>
+        [
+          toCsvCell(row.name),
+          toCsvCell(row.email),
+          row.attended ? "present" : "absent",
+          row.scannedAt ? toCsvCell(new Date(row.scannedAt).toISOString()) : "",
+        ].join(","),
+      ),
+    ].join("\n")
+
+    const eventLabel = (selectedEvent?.name ?? selectedEventId)
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9]+/g, "-")
+      .replaceAll(/^-+|-+$/g, "")
+    downloadTextFile({
+      filename: `${eventLabel}-${type}-participants.csv`,
+      content: csvRows,
+      mimeType: "text/csv;charset=utf-8;",
+    })
+    toast.success(
+      type === "present"
+        ? "Present participants CSV downloaded"
+        : type === "absent"
+          ? "Absent participants CSV downloaded"
+          : "All participants CSV downloaded",
+    )
   }
 
   return (
@@ -543,6 +628,7 @@ export default function AdminEventsPage() {
         </form>
 
         <form
+          ref={participantEditFormRef}
           onSubmit={editParticipantForm.handleSubmit(onEditParticipant)}
           className="mt-4 grid gap-2 rounded-md border p-3 sm:grid-cols-4"
         >
@@ -554,7 +640,7 @@ export default function AdminEventsPage() {
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
             >
               <option value="">Select participant</option>
-              {(eventParticipants ?? []).map((item) => (
+              {sortedEventParticipants.map((item) => (
                 <option key={item.participantId} value={item.participantId}>
                   {item.name}
                 </option>
@@ -589,10 +675,45 @@ export default function AdminEventsPage() {
           </button>
         </form>
 
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <select
+            value={participantSort}
+            onChange={(event) =>
+              setParticipantSort(event.target.value as "attended_first" | "not_attended_first")
+            }
+            className="rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
+          >
+            <option value="attended_first">Sort: Attended first</option>
+            <option value="not_attended_first">Sort: Not attended first</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => exportParticipantsCsv("present")}
+            className="rounded-md border px-3 py-2 text-sm hover:border-primary"
+          >
+            Export present CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => exportParticipantsCsv("absent")}
+            className="rounded-md border px-3 py-2 text-sm hover:border-primary"
+          >
+            Export absent CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => exportParticipantsCsv("all")}
+            className="rounded-md border px-3 py-2 text-sm hover:border-primary"
+          >
+            Export all CSV
+          </button>
+        </div>
+
         <div className="mt-4 overflow-x-auto rounded-md border">
-          <table className="min-w-full border-collapse text-sm">
+          <table className="min-w-full border-collapse text-sm select-text">
             <thead>
               <tr className="border-b bg-muted/40">
+                <th className="px-2 py-2 text-left">#</th>
                 <th className="px-2 py-2 text-left">Name</th>
                 <th className="px-2 py-2 text-left">Email</th>
                 <th className="px-2 py-2 text-left">Status</th>
@@ -601,8 +722,9 @@ export default function AdminEventsPage() {
               </tr>
             </thead>
             <tbody>
-              {(eventParticipants ?? []).map((item) => (
+              {sortedEventParticipants.map((item, index) => (
                 <tr key={item.registrationId} className="border-b">
+                  <td className="px-2 py-2">{index + 1}</td>
                   <td className="px-2 py-2">{item.name}</td>
                   <td className="px-2 py-2">{item.email}</td>
                   <td className="px-2 py-2">{item.attended ? "Attended" : "Not attended"}</td>
@@ -611,7 +733,7 @@ export default function AdminEventsPage() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setSelectedParticipantId(item.participantId)}
+                        onClick={() => handleEditParticipantClick(item.participantId)}
                         className="rounded-md border px-2 py-1 text-xs hover:border-primary"
                       >
                         Edit
