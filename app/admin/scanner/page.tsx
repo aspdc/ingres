@@ -69,6 +69,7 @@ export default function AdminScannerPage() {
   const noDetectionTimerRef = useRef<number | null>(null)
   const barcodeFallbackTimerRef = useRef<number | null>(null)
   const scannerControlsRef = useRef<IScannerControls | null>(null)
+  const shouldResumeScannerAfterDialogRef = useRef(false)
   const tokenForm = useForm<TokenValues>({
     resolver: zodResolver(tokenSchema),
     defaultValues: { token: "" },
@@ -121,6 +122,12 @@ export default function AdminScannerPage() {
     setScanStatus("Preparing confirmation...")
     try {
       const preview = await previewQrToken({ token: normalizedToken })
+
+      if (source === "camera" && isScanningRef.current) {
+        shouldResumeScannerAfterDialogRef.current = true
+        stopScanner(false)
+      }
+
       setPendingToken(normalizedToken)
       setPendingSource(source)
       setPendingPreview(preview)
@@ -134,12 +141,19 @@ export default function AdminScannerPage() {
   }
 
   function closeConfirmDialog() {
+    const shouldResumeScanner = shouldResumeScannerAfterDialogRef.current
+
     setIsConfirmDialogOpen(false)
     setPendingToken(null)
     setPendingSource(null)
     setPendingPreview(null)
     setIsSubmittingToken(false)
     isProcessingRef.current = false
+
+    shouldResumeScannerAfterDialogRef.current = false
+    if (shouldResumeScanner) {
+      void startScanner()
+    }
   }
 
   async function confirmSubmitToken() {
@@ -297,10 +311,6 @@ export default function AdminScannerPage() {
             setScanStatus("Scan completed")
           } catch {
             // Ignore fallback decode errors and continue polling.
-          } finally {
-            setTimeout(() => {
-              isProcessingRef.current = false
-            }, 1000)
           }
         }, 700)
       }
