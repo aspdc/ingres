@@ -3,7 +3,8 @@ import {
   nextjsMiddlewareRedirect,
 } from "@convex-dev/auth/nextjs/server"
 
-export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
+export default convexAuthNextjsMiddleware(
+  async (request, { convexAuth }) => {
   const { pathname, search } = request.nextUrl
 
   const isAdminLoginRoute = pathname === "/admin/login"
@@ -17,7 +18,9 @@ export default convexAuthNextjsMiddleware(async (request, { convexAuth }) => {
   if (isAdminLoginRoute && (await convexAuth.isAuthenticated())) {
     return nextjsMiddlewareRedirect(request, "/admin")
   }
-})
+},
+  { cookieConfig: { maxAge: 60 * 60 * 24 * 30 } },
+)
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
