@@ -5,7 +5,11 @@ import { requireAdmin } from "./lib/auth"
 import { getAttendanceRecord } from "./lib/attendance"
 import { parseParticipantsCsv } from "./lib/csv"
 import { invariant } from "./lib/errors"
-import { ensureParticipant, getParticipantByEmail, normalizeEmail } from "./lib/participants"
+import {
+  ensureParticipant,
+  getParticipantByEmail,
+  normalizeEmail,
+} from "./lib/participants"
 import { ensureRegistration, getRegistration } from "./lib/registrations"
 
 function getEventStatus(params: {
@@ -29,7 +33,10 @@ function getEventStatus(params: {
 export const getEvents = query({
   args: {},
   handler: async (ctx) => {
-    const events = await ctx.db.query("events").withIndex("by_start_time").collect()
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_start_time")
+      .collect()
     return events
   },
 })
@@ -37,14 +44,19 @@ export const getEvents = query({
 export const getParticipantEvents = query({
   args: { email: v.string() },
   handler: async (ctx, args) => {
-    const participant = await getParticipantByEmail(ctx, normalizeEmail(args.email))
+    const participant = await getParticipantByEmail(
+      ctx,
+      normalizeEmail(args.email)
+    )
     if (!participant) {
       return []
     }
 
     const registrations = await ctx.db
       .query("eventParticipants")
-      .withIndex("by_participant", (q) => q.eq("participant_id", participant._id))
+      .withIndex("by_participant", (q) =>
+        q.eq("participant_id", participant._id)
+      )
       .collect()
 
     const now = Date.now()
@@ -54,7 +66,11 @@ export const getParticipantEvents = query({
         if (!event) {
           return null
         }
-        const attendance = await getAttendanceRecord(ctx, event._id, participant._id)
+        const attendance = await getAttendanceRecord(
+          ctx,
+          event._id,
+          participant._id
+        )
         return {
           eventId: event._id,
           eventName: event.name,
@@ -69,7 +85,7 @@ export const getParticipantEvents = query({
           scannedAt: attendance?.scanned_at ?? null,
           seriesId: event.series_id ?? null,
         }
-      }),
+      })
     ).then((rows) => rows.filter(Boolean))
   },
 })
@@ -89,7 +105,7 @@ export const getEventParticipants = query({
         const attendance = await getAttendanceRecord(
           ctx,
           registration.event_id,
-          registration.participant_id,
+          registration.participant_id
         )
         return {
           registrationId: registration._id,
@@ -100,7 +116,7 @@ export const getEventParticipants = query({
           attended: Boolean(attendance),
           scannedAt: attendance?.scanned_at ?? null,
         }
-      }),
+      })
     )
   },
 })
@@ -116,7 +132,10 @@ export const createEvent = mutation({
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx)
-    invariant(args.start_time < args.end_time, "Event start_time must be before end_time")
+    invariant(
+      args.start_time < args.end_time,
+      "Event start_time must be before end_time"
+    )
 
     const eventId = await ctx.db.insert("events", {
       name: args.name.trim(),
@@ -256,14 +275,21 @@ export const registerParticipantForEvent = mutation({
 
     let participantId = args.participantId
     if (!participantId) {
-      invariant(args.name && args.email, "Either participantId or name+email is required")
+      invariant(
+        args.name && args.email,
+        "Either participantId or name+email is required"
+      )
       participantId = await ensureParticipant(ctx, {
         name: args.name,
         email: args.email,
       })
     }
 
-    const registrationId = await ensureRegistration(ctx, args.eventId, participantId)
+    const registrationId = await ensureRegistration(
+      ctx,
+      args.eventId,
+      participantId
+    )
     return { registrationId, participantId }
   },
 })
@@ -279,7 +305,7 @@ export const removeParticipantFromEvent = mutation({
     const registration = await ctx.db
       .query("eventParticipants")
       .withIndex("by_event_participant", (q) =>
-        q.eq("event_id", args.eventId).eq("participant_id", args.participantId),
+        q.eq("event_id", args.eventId).eq("participant_id", args.participantId)
       )
       .unique()
     if (registration) {
@@ -289,7 +315,7 @@ export const removeParticipantFromEvent = mutation({
     const attendance = await ctx.db
       .query("attendance")
       .withIndex("by_event_participant", (q) =>
-        q.eq("event_id", args.eventId).eq("participant_id", args.participantId),
+        q.eq("event_id", args.eventId).eq("participant_id", args.participantId)
       )
       .unique()
     if (attendance) {
@@ -309,12 +335,20 @@ export const setParticipantAttendanceStatus = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx)
 
-    const registration = await getRegistration(ctx, args.eventId, args.participantId)
+    const registration = await getRegistration(
+      ctx,
+      args.eventId,
+      args.participantId
+    )
     if (!registration) {
       throw new Error("Participant is not registered for this event")
     }
 
-    const existingAttendance = await getAttendanceRecord(ctx, args.eventId, args.participantId)
+    const existingAttendance = await getAttendanceRecord(
+      ctx,
+      args.eventId,
+      args.participantId
+    )
 
     if (args.attended) {
       if (existingAttendance) {
@@ -332,5 +366,61 @@ export const setParticipantAttendanceStatus = mutation({
       await ctx.db.delete(existingAttendance._id)
     }
     return { attendanceId: null, attended: false }
+  },
+})
+
+export const setBulkParticipantAttendanceStatus = mutation({
+  args: {
+    eventId: v.id("events"),
+    participantIds: v.array(v.id("participants")),
+    attended: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx)
+
+    const uniqueParticipantIds = [...new Set(args.participantIds)]
+    let updatedCount = 0
+    let skippedCount = 0
+
+    for (const participantId of uniqueParticipantIds) {
+      const registration = await getRegistration(
+        ctx,
+        args.eventId,
+        participantId
+      )
+      if (!registration) {
+        skippedCount += 1
+        continue
+      }
+
+      const existingAttendance = await getAttendanceRecord(
+        ctx,
+        args.eventId,
+        participantId
+      )
+      if (args.attended) {
+        if (!existingAttendance) {
+          await ctx.db.insert("attendance", {
+            event_id: args.eventId,
+            participant_id: participantId,
+            scanned_at: Date.now(),
+          })
+        }
+        updatedCount += 1
+        continue
+      }
+
+      if (existingAttendance) {
+        await ctx.db.delete(existingAttendance._id)
+      }
+      updatedCount += 1
+    }
+
+    return {
+      processedCount: uniqueParticipantIds.length,
+      updatedCount,
+      skippedCount,
+      attended: args.attended,
+    }
   },
 })

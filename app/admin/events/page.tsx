@@ -73,20 +73,32 @@ export default function AdminEventsPage() {
   const updateEvent = useMutation(api.events.updateEvent)
   const deleteEvent = useMutation(api.events.deleteEvent)
   const importParticipantsCsv = useMutation(api.events.importParticipantsCSV)
-  const registerParticipantForEvent = useMutation(api.events.registerParticipantForEvent)
-  const removeParticipantFromEvent = useMutation(api.events.removeParticipantFromEvent)
-  const setParticipantAttendanceStatus = useMutation(api.events.setParticipantAttendanceStatus)
+  const registerParticipantForEvent = useMutation(
+    api.events.registerParticipantForEvent
+  )
+  const removeParticipantFromEvent = useMutation(
+    api.events.removeParticipantFromEvent
+  )
+  const setParticipantAttendanceStatus = useMutation(
+    api.events.setParticipantAttendanceStatus
+  )
+  const setBulkParticipantAttendanceStatus = useMutation(
+    api.events.setBulkParticipantAttendanceStatus
+  )
   const updateParticipant = useMutation(api.participants.updateParticipant)
   const [selectedEventId, setSelectedEventId] = useState<string>("")
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>("")
-  const [participantSort, setParticipantSort] = useState<"attended_first" | "not_attended_first">(
-    "attended_first",
-  )
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<
+    Id<"participants">[]
+  >([])
+  const [participantSort, setParticipantSort] = useState<
+    "attended_first" | "not_attended_first"
+  >("attended_first")
   const participantEditFormRef = useRef<HTMLFormElement | null>(null)
 
   const eventParticipants = useQuery(
     api.events.getEventParticipants,
-    selectedEventId ? { eventId: selectedEventId as Id<"events"> } : "skip",
+    selectedEventId ? { eventId: selectedEventId as Id<"events"> } : "skip"
   )
 
   const createForm = useForm<CreateEventValues>({
@@ -134,13 +146,16 @@ export default function AdminEventsPage() {
   })
 
   const sortedEvents = useMemo(
-    () => (events ? [...events].sort((a, b) => a.start_time - b.start_time) : []),
-    [events],
+    () =>
+      events ? [...events].sort((a, b) => a.start_time - b.start_time) : [],
+    [events]
   )
-  const selectedEvent = sortedEvents.find((item) => item._id === selectedEventId) ?? null
+  const selectedEvent =
+    sortedEvents.find((item) => item._id === selectedEventId) ?? null
   const selectedParticipant =
-    (eventParticipants ?? []).find((item) => item.participantId === selectedParticipantId) ??
-    null
+    (eventParticipants ?? []).find(
+      (item) => item.participantId === selectedParticipantId
+    ) ?? null
   const sortedEventParticipants = useMemo(() => {
     const rows = [...(eventParticipants ?? [])]
     return rows.sort((a, b) => {
@@ -152,6 +167,13 @@ export default function AdminEventsPage() {
         : Number(a.attended) - Number(b.attended)
     })
   }, [eventParticipants, participantSort])
+  const allVisibleParticipantIds = useMemo(
+    () => sortedEventParticipants.map((item) => item.participantId),
+    [sortedEventParticipants]
+  )
+  const allVisibleSelected =
+    allVisibleParticipantIds.length > 0 &&
+    allVisibleParticipantIds.every((id) => selectedParticipantIds.includes(id))
 
   useEffect(() => {
     if (!selectedEvent) {
@@ -175,7 +197,9 @@ export default function AdminEventsPage() {
       participantId: selectedParticipant.participantId,
       name: selectedParticipant.name,
       email: selectedParticipant.email,
-      attendanceStatus: selectedParticipant.attended ? "attended" : "not_attended",
+      attendanceStatus: selectedParticipant.attended
+        ? "attended"
+        : "not_attended",
     })
   }, [selectedParticipant, editParticipantForm])
 
@@ -198,7 +222,9 @@ export default function AdminEventsPage() {
       toast.success("Event created")
       createForm.reset()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create event")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create event"
+      )
     }
   }
 
@@ -210,7 +236,9 @@ export default function AdminEventsPage() {
         setSelectedEventId("")
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete event")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete event"
+      )
     }
   }
 
@@ -245,11 +273,15 @@ export default function AdminEventsPage() {
         description: values.description,
         start_time: start,
         end_time: end,
-        series_id: values.seriesId ? (values.seriesId as Id<"series">) : undefined,
+        series_id: values.seriesId
+          ? (values.seriesId as Id<"series">)
+          : undefined,
       })
       toast.success("Event updated")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update event")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update event"
+      )
     }
   }
 
@@ -270,7 +302,9 @@ export default function AdminEventsPage() {
         email: "",
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to add participant")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to add participant"
+      )
     }
   }
 
@@ -292,26 +326,99 @@ export default function AdminEventsPage() {
       })
       toast.success("Participant updated")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update participant")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update participant"
+      )
     }
   }
 
-  async function onRemoveParticipant(participantId: string) {
+  async function onRemoveParticipant(participantId: Id<"participants">) {
     if (!selectedEventId) {
       return
     }
     try {
       await removeParticipantFromEvent({
         eventId: selectedEventId as Id<"events">,
-        participantId: participantId as Id<"participants">,
+        participantId,
       })
       toast.success("Participant removed from event")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to remove participant")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to remove participant"
+      )
     }
   }
 
-  function handleEditParticipantClick(participantId: string) {
+  async function onBulkUpdateAttendance(attended: boolean) {
+    if (!selectedEventId) {
+      toast.error("Select an event first")
+      return
+    }
+    const selectedVisibleIds = selectedParticipantIds.filter((id) =>
+      allVisibleParticipantIds.includes(id)
+    )
+    if (selectedVisibleIds.length === 0) {
+      toast.error("Select at least one participant")
+      return
+    }
+
+    try {
+      const result = await setBulkParticipantAttendanceStatus({
+        eventId: selectedEventId as Id<"events">,
+        participantIds: selectedVisibleIds,
+        attended,
+      })
+      if (result.skippedCount > 0) {
+        toast.warning(
+          `Updated ${result.updatedCount} participants (${result.skippedCount} skipped)`
+        )
+      } else {
+        toast.success(
+          attended
+            ? `Marked ${result.updatedCount} participants as attended`
+            : `Marked ${result.updatedCount} participants as not attended`
+        )
+      }
+      setSelectedParticipantIds([])
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update selected participants"
+      )
+    }
+  }
+
+  function toggleParticipantSelection(participantId: Id<"participants">) {
+    setSelectedParticipantIds((current) => {
+      if (current.includes(participantId)) {
+        return current.filter((id) => id !== participantId)
+      }
+      return [...current, participantId]
+    })
+  }
+
+  function toggleSelectAllVisible() {
+    if (allVisibleParticipantIds.length === 0) {
+      return
+    }
+    setSelectedParticipantIds((current) => {
+      const currentSet = new Set(current)
+      const shouldSelectAll = !allVisibleParticipantIds.every((id) =>
+        currentSet.has(id)
+      )
+      if (!shouldSelectAll) {
+        return current.filter((id) => !allVisibleParticipantIds.includes(id))
+      }
+      const merged = new Set(current)
+      for (const id of allVisibleParticipantIds) {
+        merged.add(id)
+      }
+      return Array.from(merged)
+    })
+  }
+
+  function handleEditParticipantClick(participantId: Id<"participants">) {
     setSelectedParticipantId(participantId)
     requestAnimationFrame(() => {
       participantEditFormRef.current?.scrollIntoView({
@@ -345,7 +452,7 @@ export default function AdminEventsPage() {
           ? "No present participants found"
           : type === "absent"
             ? "No absent participants found"
-            : "No participants found",
+            : "No participants found"
       )
       return
     }
@@ -358,7 +465,7 @@ export default function AdminEventsPage() {
           toCsvCell(row.email),
           row.attended ? "present" : "absent",
           row.scannedAt ? toCsvCell(new Date(row.scannedAt).toISOString()) : "",
-        ].join(","),
+        ].join(",")
       ),
     ].join("\n")
 
@@ -376,7 +483,7 @@ export default function AdminEventsPage() {
         ? "Present participants CSV downloaded"
         : type === "absent"
           ? "Absent participants CSV downloaded"
-          : "All participants CSV downloaded",
+          : "All participants CSV downloaded"
     )
   }
 
@@ -390,7 +497,10 @@ export default function AdminEventsPage() {
           <span className="text-sm">Active event</span>
           <select
             value={selectedEventId}
-            onChange={(event) => setSelectedEventId(event.target.value)}
+            onChange={(event) => {
+              setSelectedEventId(event.target.value)
+              setSelectedParticipantIds([])
+            }}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
           >
             <option value="">Select event</option>
@@ -404,7 +514,8 @@ export default function AdminEventsPage() {
 
         {selectedEvent ? (
           <p className="mb-3 rounded-md border bg-muted/50 px-3 py-2 text-sm">
-            Active event: <span className="font-medium">{selectedEvent.name}</span>
+            Active event:{" "}
+            <span className="font-medium">{selectedEvent.name}</span>
           </p>
         ) : null}
 
@@ -422,7 +533,9 @@ export default function AdminEventsPage() {
               {sortedEvents.map((item) => (
                 <tr key={item._id} className="border-b">
                   <td className="px-2 py-2">{item.name}</td>
-                  <td className="px-2 py-2">{formatDateTime(item.start_time)}</td>
+                  <td className="px-2 py-2">
+                    {formatDateTime(item.start_time)}
+                  </td>
                   <td className="px-2 py-2">{formatDateTime(item.end_time)}</td>
                   <td className="px-2 py-2">
                     <div className="flex gap-2">
@@ -449,7 +562,10 @@ export default function AdminEventsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Create Event" description="Create a new event record.">
+      <SectionCard
+        title="Create Event"
+        description="Create a new event record."
+      >
         <form
           onSubmit={createForm.handleSubmit(onCreateEvent)}
           className="grid gap-3 sm:grid-cols-2"
@@ -523,10 +639,15 @@ export default function AdminEventsPage() {
         description="Update details for the selected event."
       >
         {!selectedEventId ? (
-          <p className="text-sm text-muted-foreground">Select an event in step 1 first.</p>
+          <p className="text-sm text-muted-foreground">
+            Select an event in step 1 first.
+          </p>
         ) : null}
 
-        <form onSubmit={editForm.handleSubmit(onEditEvent)} className="grid gap-3 sm:grid-cols-2">
+        <form
+          onSubmit={editForm.handleSubmit(onEditEvent)}
+          className="grid gap-3 sm:grid-cols-2"
+        >
           <input type="hidden" {...editForm.register("eventId")} />
           <label className="space-y-1 sm:col-span-2">
             <span className="text-sm">Name</span>
@@ -620,7 +741,9 @@ export default function AdminEventsPage() {
           />
           <button
             type="submit"
-            disabled={!selectedEventId || addParticipantForm.formState.isSubmitting}
+            disabled={
+              !selectedEventId || addParticipantForm.formState.isSubmitting
+            }
             className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
           >
             Add participant
@@ -647,7 +770,10 @@ export default function AdminEventsPage() {
               ))}
             </select>
           </label>
-          <input type="hidden" {...editParticipantForm.register("participantId")} />
+          <input
+            type="hidden"
+            {...editParticipantForm.register("participantId")}
+          />
           <input
             {...editParticipantForm.register("name")}
             placeholder="Updated name"
@@ -668,7 +794,10 @@ export default function AdminEventsPage() {
           </select>
           <button
             type="submit"
-            disabled={!selectedParticipantId || editParticipantForm.formState.isSubmitting}
+            disabled={
+              !selectedParticipantId ||
+              editParticipantForm.formState.isSubmitting
+            }
             className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             Save participant
@@ -679,7 +808,9 @@ export default function AdminEventsPage() {
           <select
             value={participantSort}
             onChange={(event) =>
-              setParticipantSort(event.target.value as "attended_first" | "not_attended_first")
+              setParticipantSort(
+                event.target.value as "attended_first" | "not_attended_first"
+              )
             }
             className="rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
           >
@@ -707,12 +838,39 @@ export default function AdminEventsPage() {
           >
             Export all CSV
           </button>
+          <span className="ml-auto text-xs text-muted-foreground">
+            Selected: {selectedParticipantIds.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => onBulkUpdateAttendance(true)}
+            disabled={!selectedEventId || selectedParticipantIds.length === 0}
+            className="rounded-md border px-3 py-2 text-sm hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Mark selected present
+          </button>
+          <button
+            type="button"
+            onClick={() => onBulkUpdateAttendance(false)}
+            disabled={!selectedEventId || selectedParticipantIds.length === 0}
+            className="rounded-md border px-3 py-2 text-sm hover:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Mark selected absent
+          </button>
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-md border">
           <table className="min-w-full border-collapse text-sm select-text">
             <thead>
               <tr className="border-b bg-muted/40">
+                <th className="px-2 py-2 text-left">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAllVisible}
+                    aria-label="Select all participants"
+                  />
+                </th>
                 <th className="px-2 py-2 text-left">#</th>
                 <th className="px-2 py-2 text-left">Name</th>
                 <th className="px-2 py-2 text-left">Email</th>
@@ -724,16 +882,34 @@ export default function AdminEventsPage() {
             <tbody>
               {sortedEventParticipants.map((item, index) => (
                 <tr key={item.registrationId} className="border-b">
+                  <td className="px-2 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedParticipantIds.includes(
+                        item.participantId
+                      )}
+                      onChange={() =>
+                        toggleParticipantSelection(item.participantId)
+                      }
+                      aria-label={`Select ${item.name}`}
+                    />
+                  </td>
                   <td className="px-2 py-2">{index + 1}</td>
                   <td className="px-2 py-2">{item.name}</td>
                   <td className="px-2 py-2">{item.email}</td>
-                  <td className="px-2 py-2">{item.attended ? "Attended" : "Not attended"}</td>
-                  <td className="px-2 py-2">{formatDateTime(item.scannedAt)}</td>
+                  <td className="px-2 py-2">
+                    {item.attended ? "Attended" : "Not attended"}
+                  </td>
+                  <td className="px-2 py-2">
+                    {formatDateTime(item.scannedAt)}
+                  </td>
                   <td className="px-2 py-2">
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => handleEditParticipantClick(item.participantId)}
+                        onClick={() =>
+                          handleEditParticipantClick(item.participantId)
+                        }
                         className="rounded-md border px-2 py-1 text-xs hover:border-primary"
                       >
                         Edit
@@ -758,7 +934,10 @@ export default function AdminEventsPage() {
         title="CSV Participant Import"
         description="Upload participants for one event in a single mutation."
       >
-        <form onSubmit={importForm.handleSubmit(onImportCsv)} className="space-y-3">
+        <form
+          onSubmit={importForm.handleSubmit(onImportCsv)}
+          className="space-y-3"
+        >
           <label className="block space-y-1">
             <span className="text-sm">CSV</span>
             <textarea
