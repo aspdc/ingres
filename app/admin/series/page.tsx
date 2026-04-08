@@ -15,7 +15,10 @@ import { SectionCard } from "@/components/ui/section-card"
 const createSeriesSchema = z.object({
   name: z.string().trim().min(1, "Series name is required"),
   description: z.string().trim(),
-  minEventsRequired: z.number().int().min(1, "Minimum events must be at least 1"),
+  minEventsRequired: z
+    .number()
+    .int()
+    .min(1, "Minimum events must be at least 1"),
   requiredEventId: z.string(),
 })
 
@@ -35,18 +38,20 @@ export default function AdminSeriesPage() {
   const [participantEmail, setParticipantEmail] = useState<string | null>(null)
   const progress = useQuery(
     api.series.getSeriesProgress,
-    participantEmail ? { email: participantEmail } : "skip",
+    participantEmail ? { email: participantEmail } : "skip"
   )
   const certificatesCsv = useQuery(
     api.exports.exportCertificatesCSV,
-    selectedSeriesId ? { seriesId: selectedSeriesId as never } : {},
+    selectedSeriesId ? { seriesId: selectedSeriesId as never } : {}
   )
 
   const sortedEvents = useMemo(
-    () => (events ? [...events].sort((a, b) => a.start_time - b.start_time) : []),
-    [events],
+    () =>
+      events ? [...events].sort((a, b) => a.start_time - b.start_time) : [],
+    [events]
   )
-  const selectedSeries = (series ?? []).find((item) => item._id === selectedSeriesId) ?? null
+  const selectedSeries =
+    (series ?? []).find((item) => item._id === selectedSeriesId) ?? null
 
   const createForm = useForm<CreateSeriesValues>({
     resolver: zodResolver(createSeriesSchema),
@@ -70,7 +75,9 @@ export default function AdminSeriesPage() {
         name: values.name,
         description: values.description,
         min_events_required: values.minEventsRequired,
-        required_event_id: values.requiredEventId ? (values.requiredEventId as never) : undefined,
+        required_event_id: values.requiredEventId
+          ? (values.requiredEventId as never)
+          : undefined,
       })
       toast.success("Series created")
       createForm.reset({
@@ -80,7 +87,9 @@ export default function AdminSeriesPage() {
         requiredEventId: "",
       })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create series")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create series"
+      )
     }
   }
 
@@ -96,11 +105,16 @@ export default function AdminSeriesPage() {
         name: values.name,
         description: values.description,
         min_events_required: values.minEventsRequired,
-        required_event_id: values.requiredEventId ? (values.requiredEventId as never) : undefined,
+        required_event_id: values.requiredEventId
+          ? (values.requiredEventId as never)
+          : undefined,
+        clear_required_event: values.requiredEventId === "",
       })
       toast.success("Series updated")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update series")
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update series"
+      )
     }
   }
 
@@ -121,7 +135,8 @@ export default function AdminSeriesPage() {
             onChange={(event) => {
               const nextId = event.target.value
               setSelectedSeriesId(nextId)
-              const item = (series ?? []).find((entry) => entry._id === nextId) ?? null
+              const item =
+                (series ?? []).find((entry) => entry._id === nextId) ?? null
               if (item) {
                 createForm.reset({
                   name: item.name,
@@ -165,7 +180,9 @@ export default function AdminSeriesPage() {
             <input
               type="number"
               min={1}
-              {...createForm.register("minEventsRequired", { valueAsNumber: true })}
+              {...createForm.register("minEventsRequired", {
+                valueAsNumber: true,
+              })}
               className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:border-primary"
             />
           </label>
@@ -236,7 +253,9 @@ export default function AdminSeriesPage() {
         ) : null}
 
         {!participantEmail ? (
-          <p className="text-sm text-muted-foreground">Enter an email to preview eligibility.</p>
+          <p className="text-sm text-muted-foreground">
+            Enter an email to preview eligibility.
+          </p>
         ) : !progress ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : progress.length === 0 ? (
@@ -264,7 +283,9 @@ export default function AdminSeriesPage() {
                         ? `${item.requiredEventName} (${item.hasRequiredEvent ? "done" : "missing"})`
                         : "None"}
                     </td>
-                    <td className="px-2 py-2">{item.eligible ? "Yes" : "No"}</td>
+                    <td className="px-2 py-2">
+                      {item.eligible ? "Yes" : "No"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -20,7 +20,7 @@ type ProgressResult = {
 
 async function computeSeriesProgressForParticipant(
   ctx: QueryCtx,
-  participantId: Id<"participants">,
+  participantId: Id<"participants">
 ) {
   const allSeries = await ctx.db.query("series").collect()
   const registrations = await ctx.db
@@ -28,7 +28,9 @@ async function computeSeriesProgressForParticipant(
     .withIndex("by_participant", (q) => q.eq("participant_id", participantId))
     .collect()
 
-  const registrationEventIds = new Set(registrations.map((registration) => registration.event_id))
+  const registrationEventIds = new Set(
+    registrations.map((registration) => registration.event_id)
+  )
   const attendance = await ctx.db
     .query("attendance")
     .withIndex("by_participant", (q) => q.eq("participant_id", participantId))
@@ -42,10 +44,15 @@ async function computeSeriesProgressForParticipant(
       .withIndex("by_series", (q) => q.eq("series_id", item._id))
       .collect()
 
-    const relevantEvents = seriesEvents.filter((event) => registrationEventIds.has(event._id))
-    const attendedInSeries = relevantEvents.filter((event) => attendedEventIds.has(event._id))
+    const relevantEvents = seriesEvents.filter((event) =>
+      registrationEventIds.has(event._id)
+    )
+    const attendedInSeries = relevantEvents.filter((event) =>
+      attendedEventIds.has(event._id)
+    )
     const requiredEvent = item.required_event_id
-      ? seriesEvents.find((event) => event._id === item.required_event_id) ?? null
+      ? (seriesEvents.find((event) => event._id === item.required_event_id) ??
+        null)
       : null
     const hasRequiredEvent = item.required_event_id
       ? attendedEventIds.has(item.required_event_id)
@@ -80,7 +87,10 @@ export const getSeries = query({
 export const getSeriesProgress = query({
   args: { email: v.string() },
   handler: async (ctx, args) => {
-    const participant = await getParticipantByEmail(ctx, normalizeEmail(args.email))
+    const participant = await getParticipantByEmail(
+      ctx,
+      normalizeEmail(args.email)
+    )
     if (!participant) {
       return []
     }
@@ -126,6 +136,7 @@ export const updateSeries = mutation({
     description: v.optional(v.string()),
     min_events_required: v.optional(v.number()),
     required_event_id: v.optional(v.id("events")),
+    clear_required_event: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx)
@@ -134,7 +145,10 @@ export const updateSeries = mutation({
       throw new Error("Series not found")
     }
 
-    if (args.min_events_required !== undefined && args.min_events_required < 1) {
+    if (
+      args.min_events_required !== undefined &&
+      args.min_events_required < 1
+    ) {
       throw new Error("min_events_required must be at least 1")
     }
     if (args.required_event_id) {
@@ -143,6 +157,9 @@ export const updateSeries = mutation({
         throw new Error("required_event_id does not exist")
       }
     }
+    if (args.clear_required_event && args.required_event_id) {
+      throw new Error("Cannot set and clear required_event_id at the same time")
+    }
 
     await ctx.db.patch(args.seriesId, {
       ...(args.name ? { name: args.name.trim() } : {}),
@@ -150,6 +167,7 @@ export const updateSeries = mutation({
       ...(args.min_events_required !== undefined
         ? { min_events_required: args.min_events_required }
         : {}),
+      ...(args.clear_required_event ? { required_event_id: undefined } : {}),
       ...(args.required_event_id !== undefined
         ? { required_event_id: args.required_event_id }
         : {}),
